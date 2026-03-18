@@ -1,29 +1,36 @@
 """
 analizador.py — Lógica principal del analizador léxico.
 
-Recorre el código fuente usando el patrón maestro y produce
-una lista de Token, reclasificando identificadores que resulten
-ser palabras clave, literales booleanos o literales nulos.
+Recorre el código fuente usando el patrón maestro y produce:
+  - Una lista de Token únicos (sin repeticiones por valor+tipo).
+  - Un diccionario de frecuencias {(tipo, valor): cantidad}.
+  - Una lista de mensajes de error léxico.
 """
 
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 from tipos_token import Token, PALABRAS_CLAVE, LITERALES_BOOLEANOS, LITERALES_NULOS
-from reglas  import PATRON_MAESTRO
+from reglas      import PATRON_MAESTRO
 
 
 # ─────────────────────────────────────────────
 #  FUNCIÓN PRINCIPAL
 # ─────────────────────────────────────────────
 
-def analizar(codigo: str) -> Tuple[List[Token], List[str]]:
+def analizar(
+    codigo: str,
+) -> Tuple[List[Token], Dict[Tuple[str, str], int], List[str]]:
     """
     Analiza el código fuente y devuelve:
-      - lista de Token reconocidos
-      - lista de mensajes de error léxico
+      - tokens_unicos  : lista de Token sin duplicados (primera aparición).
+      - frecuencias    : dict {(tipo, valor): cantidad de apariciones}.
+      - errores        : lista de mensajes de error léxico.
     """
-    tokens:  List[Token] = []
-    errores: List[str]   = []
+    tokens_unicos: List[Token]                    = []
+    frecuencias:   Dict[Tuple[str, str], int]     = {}
+    vistos:        set                            = set()   # claves (tipo, valor) ya registradas
+    errores:       List[str]                      = []
+
     linea        = 1
     inicio_linea = 0
 
@@ -63,6 +70,12 @@ def analizar(codigo: str) -> Tuple[List[Token], List[str]]:
                 f"carácter inesperado '{valor}'"
             )
 
-        tokens.append(Token(tipo, valor, linea, col))
+        # ── Acumular frecuencia y registrar si es nuevo ────
+        clave = (tipo, valor)
+        frecuencias[clave] = frecuencias.get(clave, 0) + 1
 
-    return tokens, errores
+        if clave not in vistos:
+            vistos.add(clave)
+            tokens_unicos.append(Token(tipo, valor, linea, col))
+
+    return tokens_unicos, frecuencias, errores
