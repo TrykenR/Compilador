@@ -2,25 +2,26 @@
 reporte.py — Utilidades para mostrar resultados del análisis léxico.
 
 Contiene:
-  - estadisticas()     → conteo de tokens por categoría
-  - imprimir_reporte() → salida formateada en consola
+  - estadisticas()     → conteo de tokens únicos por categoría
+  - imprimir_reporte() → salida formateada en consola con frecuencias
 """
 
 from collections import Counter
-from typing import List
+from typing import Dict, List, Tuple
+
 from tipos_token import Token
 
 
-SEP  = "─" * 65
-DOBLE = "═" * 65
+SEP   = "─" * 72
+DOBLE = "═" * 72
 
 
 # ─────────────────────────────────────────────
-#  ESTADÍSTICAS
+#  ESTADÍSTICAS POR CATEGORÍA
 # ─────────────────────────────────────────────
 
 def estadisticas(tokens: List[Token]) -> dict:
-    """Devuelve un diccionario {tipo: cantidad} ordenado alfabéticamente."""
+    """Devuelve un diccionario {tipo: cantidad de tokens únicos} ordenado."""
     conteo = Counter(t.tipo for t in tokens)
     return dict(sorted(conteo.items()))
 
@@ -30,11 +31,12 @@ def estadisticas(tokens: List[Token]) -> dict:
 # ─────────────────────────────────────────────
 
 def imprimir_reporte(
-    tokens:  List[Token],
-    errores: List[str],
-    nombre:  str = ""
+    tokens:      List[Token],
+    frecuencias: Dict[Tuple[str, str], int],
+    errores:     List[str],
+    nombre:      str = ""
 ) -> None:
-    """Imprime en consola la tabla de tokens, estadísticas y errores."""
+    """Imprime la tabla de tokens únicos con su frecuencia, estadísticas y errores."""
 
     # Encabezado
     print(f"\n{DOBLE}")
@@ -43,16 +45,23 @@ def imprimir_reporte(
         print(f"  Fuente: {nombre}")
     print(DOBLE)
 
-    # Tabla de tokens
-    print(f"\n{'TOKENS ENCONTRADOS':^65}")
+    # Tabla de tokens únicos
+    print(f"\n{'TOKENS ÚNICOS DETECTADOS':^72}")
+    print(f"  {'TIPO':<28}  {'VALOR':<22}  {'APARICIONES':>11}")
     print(SEP)
     for tok in tokens:
-        print(tok)
+        freq  = frecuencias.get((tok.tipo, tok.valor), 1)
+        barra = '▪' * min(freq, 20)          # máximo 20 caracteres de barra
+        print(f"  {tok.tipo:<28}  {tok.valor:<22}  {freq:>5}  {barra}")
     print(SEP)
-    print(f"\nTotal de tokens: {len(tokens)}")
 
-    # Estadísticas
-    print(f"\n{'ESTADÍSTICAS POR CATEGORÍA':^65}")
+    total_unicos    = len(tokens)
+    total_aparicion = sum(frecuencias.values())
+    print(f"\n  Tokens únicos    : {total_unicos}")
+    print(f"  Total apariciones: {total_aparicion}")
+
+    # Estadísticas por categoría
+    print(f"\n{'ESTADÍSTICAS POR CATEGORÍA':^72}")
     print(SEP)
     for tipo, cantidad in estadisticas(tokens).items():
         barra = '█' * cantidad
@@ -60,7 +69,7 @@ def imprimir_reporte(
 
     # Errores
     if errores:
-        print(f"\n{'ERRORES LÉXICOS':^65}")
+        print(f"\n{'ERRORES LÉXICOS':^72}")
         print(SEP)
         for e in errores:
             print(f"  {e}")
@@ -68,3 +77,4 @@ def imprimir_reporte(
         print("\n  ✓ Sin errores léxicos detectados.")
 
     print(f"\n{DOBLE}\n")
+    

@@ -72,5 +72,6 @@ if __name__ == "__main__":
     ]
 
     for nombre, codigo in ejemplos:
-        tokens, errores = analizar(codigo)
-        imprimir_reporte(tokens, errores, nombre)
+        tokens, frecuencias, errores = analizar(codigo)
+        imprimir_reporte(tokens, frecuencias, errores, nombre)
+        
