@@ -42,3 +42,4 @@ class Token:
             f"[Línea {self.linea:>3}, Col {self.columna:>3}]"
             f"  {self.tipo:<28} → '{self.valor}'"
         )
+        
