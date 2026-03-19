@@ -25,7 +25,6 @@ def estadisticas(tokens: List[Token]) -> dict:
     conteo = Counter(t.tipo for t in tokens)
     return dict(sorted(conteo.items()))
 
-
 # ─────────────────────────────────────────────
 #  REPORTE EN CONSOLA
 # ─────────────────────────────────────────────
