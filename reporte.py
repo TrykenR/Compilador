@@ -25,6 +25,7 @@ def estadisticas(tokens: List[Token]) -> dict:
     conteo = Counter(t.tipo for t in tokens)
     return dict(sorted(conteo.items()))
 
+
 # ─────────────────────────────────────────────
 #  REPORTE EN CONSOLA
 # ─────────────────────────────────────────────
@@ -49,8 +50,9 @@ def imprimir_reporte(
     print(f"  {'TIPO':<28}  {'VALOR':<22}  {'APARICIONES':>11}")
     print(SEP)
     for tok in tokens:
+        # CORRECCIÓN: la clave es una tupla (tipo, valor), no string
         freq  = frecuencias.get((tok.tipo, tok.valor), 1)
-        barra = '▪' * min(freq, 20)          # máximo 20 caracteres de barra
+        barra = '▪' * min(freq, 20)
         print(f"  {tok.tipo:<28}  {tok.valor:<22}  {freq:>5}  {barra}")
     print(SEP)
 
@@ -63,7 +65,7 @@ def imprimir_reporte(
     print(f"\n{'ESTADÍSTICAS POR CATEGORÍA':^72}")
     print(SEP)
     for tipo, cantidad in estadisticas(tokens).items():
-        barra = '█' * cantidad
+        barra = '█' * min(cantidad, 40)
         print(f"  {tipo:<28} {cantidad:>4}  {barra}")
 
     # Errores

@@ -1,5 +1,5 @@
 """
-token.py — Definición de la clase Token y constantes del lenguaje.
+tipos_token.py — Definición de la clase Token y constantes del lenguaje.
 
 Categorías según el material de Compiladores
 (Robert Damian Quintero Laverde):
@@ -7,7 +7,8 @@ Categorías según el material de Compiladores
   DELIMITADOR, SEPARADOR, COMENTARIO, DESCONOCIDO
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Optional
 
 
 # ─────────────────────────────────────────────
@@ -24,6 +25,9 @@ PALABRAS_CLAVE = {
 
 LITERALES_BOOLEANOS = {'true', 'false', 'True', 'False'}
 LITERALES_NULOS     = {'null', 'None', 'nil'}
+
+# Tipos de datos primitivos reconocidos por el parser
+TIPOS_PRIMITIVOS = {'int', 'float', 'string', 'bool', 'void', 'char', 'double', 'long'}
 
 
 # ─────────────────────────────────────────────
@@ -42,4 +46,7 @@ class Token:
             f"[Línea {self.linea:>3}, Col {self.columna:>3}]"
             f"  {self.tipo:<28} → '{self.valor}'"
         )
-        
+
+    def __repr__(self):
+        return f"Token({self.tipo!r}, {self.valor!r}, L{self.linea}:C{self.columna})"
+    

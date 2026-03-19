@@ -14,36 +14,39 @@ import re
 # ─────────────────────────────────────────────
 
 REGLAS = [
-    # Comentarios
+    # Comentarios (antes que operadores para evitar confusión con '/')
     ('COMENTARIO_MULTILINEA', r'/\*[\s\S]*?\*/'),
     ('COMENTARIO_LINEA',      r'//[^\n]*'),
 
-    # Literales de cadena
-    ('LITERAL_CADENA',        r'"[^"]*"|\'[^\']*\''),
+    # Literales de cadena — soporta secuencias de escape (\n, \", etc.)
+    ('LITERAL_CADENA',        r'"[^"\\]*(?:\\.[^"\\]*)*"|\'[^\'\\]*(?:\\.[^\'\\]*)*\''),
 
-    # Literales numéricos  (float antes que int)
-    ('LITERAL_NUMÉRICO',      r'\d+\.\d+|\d+'),
+    # Literales numéricos (float antes que int para evitar match parcial)
+    ('LITERAL_NUMÉRICO',      r'\d+\.\d+([eE][+\-]?\d+)?|\d+[eE][+\-]?\d+|\d+'),
 
-    # Operadores — multicarácter antes que simple
-    ('OPERADOR_ASIGNACIÓN',   r'[+\-*/%]?=(?!=)'),   # =  +=  -=  *=  /=
+    # Operadores multicarácter ANTES que los de un solo carácter
+    ('OPERADOR_INCREMENTO',   r'\+\+|--'),           # ++ y -- antes que + y -
+    ('OPERADOR_ASIGNACIÓN',   r'[+\-*/%&|^]?=(?!=)'), # += -= *= /= %= &= |= ^= =
     ('OPERADOR_RELACIONAL',   r'==|!=|<=|>=|<|>'),
     ('OPERADOR_LÓGICO',       r'&&|\|\||!'),
     ('OPERADOR_ARITMÉTICO',   r'[+\-*/%]'),
+    ('OPERADOR_BITWISE',      r'[&|^~]|<<|>>'),
 
-    # Delimitadores
-    ('DELIMITADOR',           r'[(){}\[\];,]'),
+    # Delimitadores (incluye punto para acceso a miembros)
+    ('DELIMITADOR',           r'[(){}\[\];,\.]'),
 
-    # Separadores (espacios y tabulaciones)
+    # Separadores (espacios y tabulaciones — NO saltos de línea)
     ('SEPARADOR',             r'[ \t]+'),
 
-    # Salto de línea (solo para contar líneas)
-    ('NUEVA_LÍNEA',           r'\n'),
+    # Salto de línea (solo para contar líneas, se descarta después)
+    ('NUEVA_LÍNEA',           r'\n|\r\n|\r'),
 
     # Identificadores / palabras clave / booleanos / nulos
+    # Soporta letras acentuadas y ñ para identificadores en español
     ('IDENTIFICADOR',
-     r'[a-zA-Z_áéíóúÁÉÍÓÚñÑ][a-zA-Z0-9_áéíóúÁÉÍÓÚñÑ]*'),
+     r'[a-zA-Z_áéíóúÁÉÍÓÚñÑüÜ][a-zA-Z0-9_áéíóúÁÉÍÓÚñÑüÜ]*'),
 
-    # Cualquier carácter no reconocido
+    # Cualquier carácter no reconocido (siempre al final)
     ('DESCONOCIDO',           r'.'),
 ]
 
@@ -54,5 +57,5 @@ REGLAS = [
 
 PATRON_MAESTRO = re.compile(
     '|'.join(f'(?P<{nombre}>{patron})' for nombre, patron in REGLAS),
-    re.MULTILINE
+    re.MULTILINE | re.DOTALL
 )
