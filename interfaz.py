@@ -574,14 +574,18 @@ class Compilador(tk.Tk):
                     if not nodo.hijos:
                         anchos[id(nodo)] = NODE_W
                     else:
+                        # === AQUÍ ESTÁ LA CORRECCIÓN ===
+                        # Cambiamos reversed → orden normal para que quede "al revés" del anterior
                         total  = sum(anchos[id(h)] for h in nodo.hijos)
                         total += H_GAP * (len(nodo.hijos) - 1)
                         anchos[id(nodo)] = max(total, NODE_W)
                 else:
                     pila.append((nodo, True))
-                    for hijo in reversed(nodo.hijos):
+                    # === CAMBIO PRINCIPAL ===
+                    for hijo in nodo.hijos:          # ← antes estaba reversed
                         pila.append((hijo, False))
 
+            # Posicionamiento (también en orden normal)
             cola = [(root, 0, 20)]
             while cola:
                 nodo, prof, x_ini = cola.pop(0)
@@ -590,9 +594,11 @@ class Compilador(tk.Tk):
                 posiciones[id(nodo)] = (x_centro - NODE_W // 2, cy)
 
                 x_cursor = x_ini
-                for hijo in nodo.hijos:
+                for hijo in nodo.hijos:              # ← también aquí orden normal
                     cola.append((hijo, prof + 1, x_cursor))
                     x_cursor += anchos[id(hijo)] + H_GAP
+
+            return anchos
 
         layout_iterativo(raiz)
 
@@ -835,20 +841,21 @@ class Compilador(tk.Tk):
     @staticmethod
     def _ejemplo():
         return """\
-int main() {
-    int b = 0;
-    float resultado;
-    if (b == 0) {
-        return "NO SE PUEDE DIVIDIR ENTRE 0";
-    } else {
-        resultado = dividir(10, b);
-        printf("Resultado: ", resultado);
-    }
-    for (int i = 0; i < 10; i++) {
-        resultado += i;
-    }
-    return 0;
-}"""
+def main():
+    b = 0
+    if b == 0:
+        return "NO SE PUEDE DIVIDIR ENTRE 0"
+    else:
+        resultado = dividir(10, b)
+        print("Resultado:", resultado)
+    
+    for i in range(10):
+        resultado += i
+    return 0
+
+if __name__ == "__main__":
+    main()
+"""
 
 
 # ══════════════════════════════════════════════════════════════════════════════

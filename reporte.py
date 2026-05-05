@@ -2,13 +2,6 @@
 reporte.py — Utilidades para mostrar los resultados del análisis léxico
              en la consola (salida de texto plano).
 
-Este módulo es independiente de la interfaz gráfica: se puede usar desde
-la terminal para depurar o para ejecutar el compilador en modo headless
-(sin ventana), pasándole directamente el resultado de analizador.analizar().
-
-Contiene dos funciones públicas:
-  estadisticas()     → agrupa los tokens únicos por categoría y los cuenta.
-  imprimir_reporte() → imprime la tabla completa con frecuencias y errores.
 """
 
 # Counter es un dict especializado que cuenta ocurrencias de elementos.
@@ -33,13 +26,6 @@ DOBLE = "═" * 72   # separador de encabezado / cierre principal
 def estadisticas(tokens: List[Token]) -> dict:
     """
     Cuenta cuántos tokens únicos hay de cada categoría (tipo).
-
-    Recibe la lista de tokens sin duplicados producida por analizar() y
-    devuelve un diccionario ordenado alfabéticamente por tipo:
-        {'DELIMITADOR': 5, 'IDENTIFICADOR': 3, 'PALABRA_CLAVE': 4, ...}
-
-    Nota: cuenta tokens únicos, no apariciones totales. Para el total
-    de apariciones se usa sum(frecuencias.values()) en imprimir_reporte().
     """
     # La expresión generadora (t.tipo for t in tokens) extrae solo el campo
     # tipo de cada Token sin construir una lista intermedia en memoria.
@@ -63,14 +49,7 @@ def imprimir_reporte(
     """
     Imprime en consola el reporte completo del análisis léxico con tres
     secciones: tabla de tokens, estadísticas por categoría y errores.
-
-    Parámetros:
-        tokens      — lista de Token únicos, en orden de primera aparición.
-        frecuencias — dict con clave (tipo, valor) y valor entero; es la
-                      misma estructura devuelta por analizar().
-        errores     — lista de strings con mensajes de error léxico.
-        nombre      — nombre del archivo fuente que se muestra en el encabezado;
-                      si está vacío, la línea "Fuente: ..." no se imprime.
+    
     """
 
     # ── Encabezado ────────────────────────────────────────────────────────────
