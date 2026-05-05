@@ -1,32 +1,23 @@
-"""tipos_token.py — Clase Token y vocabulario del lenguaje."""
+"""tipos_token.py — Clase Token y vocabulario del lenguaje Python."""
 
 from dataclasses import dataclass
-from typing import Optional  # noqa: F401  (disponible para extensiones)
+from typing import Optional
 
+# ── Vocabulario Python ───────────────────────────────────────────────────────
 
-# ── Vocabulario ───────────────────────────────────────────────────────────────
-
-# Palabras reservadas; el léxico reclasifica IDENTIFICADOR → PALABRA_CLAVE.
 PALABRAS_CLAVE = {
-    'if', 'else', 'while', 'for', 'return',
-    'int', 'float', 'string', 'bool', 'void',
-    'class', 'def', 'import', 'print', 'include',
-    'main', 'struct', 'switch', 'case', 'break',
-    'continue', 'do', 'function', 'var', 'let', 'const',
-    'char', 'double', 'long',          # FIX: faltaban en la lista original
+    'False', 'None', 'True', 'and', 'as', 'assert', 'async', 'await', 'break',
+    'class', 'continue', 'def', 'del', 'elif', 'else', 'except', 'finally',
+    'for', 'from', 'global', 'if', 'import', 'in', 'is', 'lambda', 'nonlocal',
+    'not', 'or', 'pass', 'raise', 'return', 'try', 'while', 'with', 'yield'
 }
 
-# Reclasificados desde IDENTIFICADOR → LITERAL_BOOLEANO
-LITERALES_BOOLEANOS = {'true', 'false', 'True', 'False'}
+LITERALES_BOOLEANOS = {'True', 'False', 'true', 'false'}
+LITERALES_NULOS = {'None', 'null', 'nil'}
 
-# Reclasificados desde IDENTIFICADOR → LITERAL_NULO
-LITERALES_NULOS = {'null', 'None', 'nil'}
+# Tipos comunes usados en hints y declaraciones (para semántico)
+TIPOS_PRIMITIVOS = {'int', 'float', 'str', 'bool', 'list', 'dict', 'tuple', 'set', 'None'}
 
-# Subconjunto usado por el parser para detectar inicio de declaración.
-TIPOS_PRIMITIVOS = {'int', 'float', 'string', 'bool', 'void', 'char', 'double', 'long'}
-
-
-# ── Token ─────────────────────────────────────────────────────────────────────
 
 @dataclass
 class Token:
@@ -37,11 +28,7 @@ class Token:
     columna: int
 
     def __str__(self) -> str:
-        # Formato tabular para reportes en consola.
-        return (
-            f"[Línea {self.linea:>3}, Col {self.columna:>3}]"
-            f"  {self.tipo:<28} → '{self.valor}'"
-        )
+        return f"[Línea {self.linea:>3}, Col {self.columna:>3}]  {self.tipo:<28} → '{self.valor}'"
 
     def __repr__(self) -> str:
         return f"Token({self.tipo!r}, {self.valor!r}, L{self.linea}:C{self.columna})"

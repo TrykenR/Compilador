@@ -1,62 +1,45 @@
-"""reglas.py — Patrones regex para cada tipo de token y patrón maestro compilado."""
+"""reglas.py — Patrones regex para Python."""
 
 import re
 
-# ── Reglas (nombre, patrón) ───────────────────────────────────────────────────
-# El orden importa: los patrones más específicos/largos deben ir ANTES
-# que los más cortos que compartan prefijo (ej: /* antes de /, ++ antes de +).
-
 REGLAS = [
-    # Comentarios — deben preceder al operador '/' para no fragmentarlo.
-    ('COMENTARIO_MULTILINEA', r'/\*[\s\S]*?\*/'),   # /* ... */  (no codicioso)
-    ('COMENTARIO_LINEA',      r'//[^\n]*'),          # // hasta fin de línea
+    # Comentarios Python: # hasta fin de línea
+    ('COMENTARIO_LINEA',      r'#[^\n]*'),
 
-    # Cadenas con soporte de secuencias de escape (\n, \", \\, …)
+    # Cadenas: soporta "simple", 'simple', """triple""", '''triple'''
     ('LITERAL_CADENA',
-     r'"[^"\\]*(?:\\.[^"\\]*)*"|\'[^\'\\]*(?:\\.[^\'\\]*)*\''),
+     r'"""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\'|"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\''),
 
-    # Números: float+exp > int+exp > float > int  (de más a menos específico)
+    # Números Python (int, float, bin, oct, hex, complex, con _)
     ('LITERAL_NUMÉRICO',
-     r'\d+\.\d+([eE][+\-]?\d+)?|\d+[eE][+\-]?\d+|\d+'),
+     r'0[bB][01_]+|0[oO][0-7_]+|0[xX][0-9a-fA-F_]+|\d[\d_]*\.\d[\d_]*([eE][+\-]?\d+)?'
+     r'|\d[\d_]*[eE][+\-]?\d+|\d[\d_]*[jJ]|\d[\d_]*'),
 
-    # ++ y -- antes que + y - para evitar tokenizar ++ como dos '+'
-    ('OPERADOR_INCREMENTO',   r'\+\+|--'),
-
-    # Asignaciones simples y compuestas (=, +=, -=, …); lookahead evita confundir con ==
-    ('OPERADOR_ASIGNACIÓN',   r'[+\-*/%&|^]?=(?!=)'),
-
-    # Relacionales de dos caracteres antes que < y >
-    ('OPERADOR_RELACIONAL',   r'==|!=|<=|>=|<|>'),
-
-    # Lógicos: && y || antes que & y |
-    ('OPERADOR_LÓGICO',       r'&&|\|\||!'),
-
-    ('OPERADOR_ARITMÉTICO',   r'[+\-*/%]'),
-
-    # Bitwise después de && / || para no confundir & con && ni | con ||
+    # Operadores de dos caracteres (de más específico a menos)
+    ('OPERADOR_INCREMENTO',   r'\+\+|--|\*\*|//'),
+    ('OPERADOR_ASIGNACIÓN',   r'//=| \*\*=|<<=|>>=|&=|\|=|\^=|\+=|-=|\*=|/=|%=|@=|='),
+    ('OPERADOR_RELACIONAL',   r'==|!=|<=|>=|<>|<|>'),
+    ('OPERADOR_LÓGICO',       r'&&|\|\||and|or|not'),
+    ('OPERADOR_ARITMÉTICO',   r'[+\-*/%]|@'),
     ('OPERADOR_BITWISE',      r'[&|^~]|<<|>>'),
 
-    # Delimitadores de puntuación (incluye '.' para acceso a miembro)
-    ('DELIMITADOR',           r'[(){}\[\];,\.]'),
+    # Delimitadores (incluye : para bloques Python)
+    ('DELIMITADOR',           r'[(){}\[\];,:.]'),
 
-    # Espacios y tabulaciones: se descartan sin generar token
+    # Espacios y tabulaciones (se descartan)
     ('SEPARADOR',             r'[ \t]+'),
 
-    # Saltos de línea: \r\n antes de \r (Windows primero)
+    # Saltos de línea
     ('NUEVA_LÍNEA',           r'\n|\r\n|\r'),
 
-    # Identificadores: letra/_ inicial, luego alfanumérico/_; admite tildes y ñ
+    # Identificadores (admite Unicode)
     ('IDENTIFICADOR',
      r'[a-zA-Z_áéíóúÁÉÍÓÚñÑüÜ][a-zA-Z0-9_áéíóúÁÉÍÓÚñÑüÜ]*'),
 
-    # Comodín — captura cualquier carácter no reconocido; SIEMPRE al final
+    # Comodín
     ('DESCONOCIDO', r'.'),
 ]
 
-# ── Patrón maestro (compilado una sola vez al importar) ───────────────────────
-# Cada regla se convierte en un grupo con nombre: (?P<NOMBRE>patrón)
-# re.MULTILINE → ^ y $ reconocen inicio/fin de cada línea.
-# re.DOTALL    → '.' captura '\n', necesario para el comodín.
 PATRON_MAESTRO = re.compile(
     '|'.join(f'(?P<{nombre}>{patron})' for nombre, patron in REGLAS),
     re.MULTILINE | re.DOTALL,

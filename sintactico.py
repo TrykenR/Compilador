@@ -1,21 +1,3 @@
-"""sintactico.py — Parser por descenso recursivo que produce un AST.
-
-Gramática soportada (simplificada):
-  programa  → sentencia*
-  sentencia → decl | asig | if | while | for | do-while | switch
-            | return | break | continue | bloque | llamada';' | expr';'
-  expr      → ternario | asig_inline | logico_o
-  logico_o  → logico_y  ('||' logico_y)*
-  logico_y  → igualdad  ('&&' igualdad)*
-  igualdad  → comparacion (('=='|'!=') comparacion)*
-  comparacion → suma (('<'|'>'|'<='|'>=') suma)*
-  suma      → termino   (('+'|'-') termino)*
-  termino   → unario    (('*'|'/'|'%') unario)*
-  unario    → ('!'|'~'|'-'|'++'|'--') factor | postfijo
-  postfijo  → factor ('++'|'--'|'['expr']'|'.id')*
-  factor    → literal | '('expr')' | id'('args')' | id | kw
-"""
-
 from typing import List, Optional, Tuple
 
 from tipos_token import Token, TIPOS_PRIMITIVOS
@@ -130,18 +112,18 @@ class Parser:
         """Raíz de expresión: maneja asignación inline y operador ternario."""
         izq = self.logico_o()
 
-        # Asignación inline (asociatividad derecha: a = b = 5 → a = (b = 5))
-        if self.peek() and self.peek().tipo == 'OPERADOR_ASIG':
+        # Asignación inline (a = b = 5)
+        tok = self.peek()
+        if tok and tok.tipo == 'OPERADOR_ASIG':
             op  = self.consume()
             der = self.expr()
             return Nodo(f"asig {op.valor}", [izq, der], op.linea)
 
-        # Operador ternario: cond ? entonces : sino
+        # Operador ternario (cond ? entonces : sino) — raro en Python pero por compatibilidad
         if self.val_es('?'):
             self.consume()
             entonces = self.expr()
-            if not self.coincidir('DELIMITADOR', ':'):
-                self.esperar('DELIMITADOR', ':')
+            self.esperar('DELIMITADOR', ':')
             sino = self.expr()
             return Nodo('ternario', [izq, entonces, sino], izq.linea)
 
@@ -248,26 +230,28 @@ class Parser:
         return nodo
 
     def factor(self) -> Nodo:
-        """Unidad atómica: literal, (expr), id, llamada, cast, kw-valor."""
+        """Unidad atómica: literal, (expr), id, llamada, lista [...], keywords."""
         tok = self.peek()
         if tok is None:
-            return Nodo('ε')
+            return Nodo('ε', [], 0)
 
         # Literales
         if tok.tipo in ('LITERAL_NUM', 'LITERAL_CADENA', 'LITERAL_BOOLEANO', 'LITERAL_NULO'):
             self.consume()
             return Nodo(tok.valor, [], tok.linea)
 
-        # Cast: (tipo)expr — detectado mirando tres tokens adelante
-        if tok.valor == '(' and self.peek(1) and self.peek(1).valor in TIPOS_PRIMITIVOS:
-            sig = self.peek(2)
-            if sig and sig.valor == ')':
-                self.consume()              # '('
-                tipo_cast = self.consume()  # tipo
-                self.consume()              # ')'
-                return Nodo(f'cast({tipo_cast.valor})', [self.unario()], tok.linea)
+        # Lista literal: [10, 20, 30]
+        if tok.valor == '[':
+            self.consume()
+            elementos = []
+            while self.hay_mas() and not self.val_es(']'):
+                elementos.append(self.expr())
+                if not self.coincidir('DELIMITADOR', ','):
+                    break
+            self.esperar('DELIMITADOR', ']')
+            return Nodo('lista', elementos, tok.linea)
 
-        # Expresión agrupada
+        # Expresión entre paréntesis
         if tok.valor == '(':
             self.consume()
             if self.val_es(')'):
@@ -287,13 +271,19 @@ class Parser:
                 return Nodo(f"{tok.valor}(...)", args, tok.linea)
             return Nodo(tok.valor, [], tok.linea)
 
-        # Palabras clave usadas como valor (ya reclasificadas por el léxico)
+        # Palabras clave (True, False, None, etc.)
         if tok.tipo == 'PALABRA_CLAVE':
             self.consume()
             return Nodo(tok.valor, [], tok.linea)
 
-        return Nodo('ε')   # nada reconocido — no consumir para evitar bucles
+        # Operador unario 'not'
+        if tok.valor == 'not':
+            self.consume()
+            return Nodo('unario not', [self.factor()], tok.linea)
 
+        # Nada reconocido
+        return Nodo('ε', [], 0)
+    
     def _args(self) -> List[Nodo]:
         """Lista de argumentos separados por coma hasta encontrar ')'."""
         args = []
@@ -306,15 +296,16 @@ class Parser:
     # ── Sentencias ────────────────────────────────────────────────────────────
 
     def bloque(self) -> Nodo:
-        """{ sentencia* } — cuerpo de funciones, if, while, for…"""
         tok_inicio = self.peek()
-        self.esperar('DELIMITADOR', '{')
+        if self.val_es('{'):
+            self.consume()
         hijos = []
-        while self.hay_mas() and not self.val_es('}'):
+        while self.hay_mas() and not self.val_es('}') and not self.val_es('else') and not self.val_es('elif'):
             s = self.sentencia()
             if s:
                 hijos.append(s)
-        self.esperar('DELIMITADOR', '}')
+        if self.val_es('}'):
+            self.consume()
         return Nodo('bloque', hijos, tok_inicio.linea if tok_inicio else 0)
 
     def bloque_o_sent(self) -> Nodo:
@@ -343,100 +334,55 @@ class Parser:
         if tok is None or tok.valor == '}':
             return None
 
-        # if
+        #if
         if tok.tipo == 'PALABRA_CLAVE' and tok.valor == 'if':
             self.consume()
-            self.esperar('DELIMITADOR', '(')
             cond  = self.expr()
-            self.esperar('DELIMITADOR', ')')
+            self.esperar('DELIMITADOR', ':')          # ← obliga a poner :
             then  = self.bloque_o_sent()
+
             hijos = [Nodo('condición', [cond], tok.linea), then]
+
+            # elif (puede haber varios)
+            while self.peek() and self.peek().valor == 'elif':
+                self.consume()
+                cond_elif = self.expr()
+                self.esperar('DELIMITADOR', ':')      # ← obliga a poner :
+                then_elif = self.bloque_o_sent()
+                hijos.append(Nodo('elif', [
+                    Nodo('condición', [cond_elif]),
+                    then_elif
+                ], tok.linea))
+
+            # else (opcional)
             if self.peek() and self.peek().valor == 'else':
                 self.consume()
+                self.esperar('DELIMITADOR', ':')      # ← obliga a poner :
                 hijos.append(Nodo('else', [self.bloque_o_sent()], tok.linea))
+
             return Nodo('if', hijos, tok.linea)
 
         # while
         if tok.tipo == 'PALABRA_CLAVE' and tok.valor == 'while':
             self.consume()
-            self.esperar('DELIMITADOR', '(')
-            cond   = self.expr()
-            self.esperar('DELIMITADOR', ')')
+            cond   = self.expr()                   # sin paréntesis
+            self.esperar('DELIMITADOR', ':')
             cuerpo = self.bloque_o_sent()
             return Nodo('while', [Nodo('condición', [cond], tok.linea), cuerpo], tok.linea)
-
-        # do-while
-        if tok.tipo == 'PALABRA_CLAVE' and tok.valor == 'do':
-            self.consume()
-            cuerpo = self.bloque()
-            self.esperar('PALABRA_CLAVE', 'while')
-            self.esperar('DELIMITADOR', '(')
-            cond   = self.expr()
-            self.esperar('DELIMITADOR', ')')
-            self.coincidir('DELIMITADOR', ';')
-            return Nodo('do-while', [cuerpo, Nodo('condición', [cond], tok.linea)], tok.linea)
-
+        
         # for — init puede ser decl, asig o vacío
         if tok.tipo == 'PALABRA_CLAVE' and tok.valor == 'for':
             self.consume()
-            self.esperar('DELIMITADOR', '(')
-            init = None
-            if not self.val_es(';'):
-                if self.es_tipo_primitivo():
-                    init = self._decl_variable()
-                elif self.peek() and self.peek().tipo == 'IDENTIFICADOR':
-                    init = self._asignacion_o_llamada()
-                else:
-                    self.coincidir('DELIMITADOR', ';')
-            cond = Nodo('ε')
-            if not self.val_es(';'):
-                cond = self.expr()
-            self.esperar('DELIMITADOR', ';')
-            inc = Nodo('ε')
-            if not self.val_es(')'):
-                inc = self.expr()
-            self.esperar('DELIMITADOR', ')')
+            var = self.esperar('IDENTIFICADOR')
+            self.esperar('PALABRA_CLAVE', 'in')
+            iterable = self.expr()
+            self.esperar('DELIMITADOR', ':')          # ← obliga a poner :
             cuerpo = self.bloque_o_sent()
             return Nodo('for', [
-                Nodo('init', [init] if init else []),
-                Nodo('cond', [cond]),
-                Nodo('inc',  [inc]),
-                cuerpo,
+                Nodo('init', [Nodo(var.valor if var else '?', [], tok.linea)]),
+                Nodo('iterable', [iterable]),
+                cuerpo
             ], tok.linea)
-
-        # switch
-        if tok.tipo == 'PALABRA_CLAVE' and tok.valor == 'switch':
-            self.consume()
-            self.esperar('DELIMITADOR', '(')
-            expr_sw = self.expr()
-            self.esperar('DELIMITADOR', ')')
-            self.esperar('DELIMITADOR', '{')
-            casos = []
-            while self.hay_mas() and not self.val_es('}'):
-                ct = self.peek()
-                if ct and ct.valor == 'case':
-                    self.consume()
-                    val_case = self.expr()
-                    self.esperar('DELIMITADOR', ':')
-                    stmts = []
-                    while self.hay_mas() and not self.val_es('case', 'default', '}'):
-                        s = self.sentencia()
-                        if s:
-                            stmts.append(s)
-                    casos.append(Nodo('case', [val_case] + stmts, ct.linea))
-                elif ct and ct.valor == 'default':
-                    self.consume()
-                    self.esperar('DELIMITADOR', ':')
-                    stmts = []
-                    while self.hay_mas() and not self.val_es('case', 'default', '}'):
-                        s = self.sentencia()
-                        if s:
-                            stmts.append(s)
-                    casos.append(Nodo('default', stmts, ct.linea))
-                else:
-                    self.consume()   # token inesperado dentro del switch
-            self.esperar('DELIMITADOR', '}')
-            return Nodo('switch', [Nodo('expr-sw', [expr_sw])] + casos, tok.linea)
 
         # return [expr] ;
         if tok.tipo == 'PALABRA_CLAVE' and tok.valor == 'return':
@@ -453,17 +399,22 @@ class Parser:
             self.consume()
             self.coincidir('DELIMITADOR', ';')
             return Nodo('break', [], tok.linea)
-
-        # continue
-        if tok.tipo == 'PALABRA_CLAVE' and tok.valor == 'continue':
-            self.consume()
-            self.coincidir('DELIMITADOR', ';')
-            return Nodo('continue', [], tok.linea)
-
+        
         # Bloque anónimo
         if tok.valor == '{':
             return self.bloque()
 
+        if tok.tipo == 'PALABRA_CLAVE' and tok.valor == 'def':
+            self.consume()
+            nombre_tok = self.esperar('IDENTIFICADOR')
+            self.esperar('DELIMITADOR', '(')
+            params = self._params_func()
+            self.esperar('DELIMITADOR', ')')
+            self.esperar('DELIMITADOR', ':') 
+            cuerpo = self.bloque()
+            return Nodo(f"func {nombre_tok.valor if nombre_tok else '?'}",
+                        params + [cuerpo], tok.linea)
+        
         # Declaración de variable o función
         if self.es_tipo_primitivo():
             return self._decl_tipo()

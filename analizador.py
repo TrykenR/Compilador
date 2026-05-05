@@ -1,19 +1,10 @@
-"""analizador.py — Analizador léxico: convierte código fuente en tokens.
-
-Expone:
-  analizar()          → tokens únicos + frecuencias  (para la interfaz gráfica)
-  analizar_completo() → todos los tokens con repetidos (para el parser)
-"""
+"""analizador.py — Analizador léxico adaptado a Python."""
 
 from typing import Dict, List, Tuple
 
 from tipos_token import Token, PALABRAS_CLAVE, LITERALES_BOOLEANOS, LITERALES_NULOS
 from reglas import PATRON_MAESTRO
 
-
-# ── Normalización de nombres de tipo ──────────────────────────────────────────
-# Los nombres de grupo en reglas.py llevan tildes y son largos; aquí se
-# traducen a las claves cortas que usan la interfaz gráfica y el parser.
 _NORMALIZAR = {
     'OPERADOR_ASIGNACIÓN': 'OPERADOR_ASIG',
     'OPERADOR_RELACIONAL': 'OPERADOR_REL',
@@ -24,9 +15,7 @@ _NORMALIZAR = {
     'LITERAL_NUMÉRICO':    'LITERAL_NUM',
 }
 
-
 def _normalizar_tipo(tipo: str) -> str:
-    """Traduce nombre interno (con tildes) al nombre canónico."""
     return _NORMALIZAR.get(tipo, tipo)
 
 
