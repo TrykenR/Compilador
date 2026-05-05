@@ -1,98 +1,43 @@
-"""
-sintactico.py — Analizador Sintáctico por descenso recursivo.
+"""sintactico.py — Parser por descenso recursivo que produce un AST.
 
-Toma la lista de tokens producida por el analizador léxico y construye
-un AST (Árbol de Sintaxis Abstracta) que representa la estructura
-jerárquica del programa.
-
-La técnica usada es descenso recursivo predictivo: cada construcción
-gramatical (expresión, sentencia, bloque…) tiene su propio método en
-el Parser. Cada método mira el token actual con peek() y decide qué
-rama de la gramática aplicar sin necesidad de retroceder.
-
-Gramática soportada:
-  programa     → sentencia*
-  sentencia    → declaracion | asignacion | if_stmt | while_stmt
-               | for_stmt | do_while_stmt | switch_stmt
-               | return_stmt | break_stmt | continue_stmt
-               | bloque | llamada ';' | expr ';'
-  declaracion  → tipo IDENTIFICADOR ('=' expr)? ';'
-               | tipo IDENTIFICADOR '(' params ')' bloque      ← función
-  asignacion   → IDENTIFICADOR op_asig expr ';'
-               | IDENTIFICADOR '++' ';'
-               | IDENTIFICADOR '--' ';'
-  if_stmt      → 'if' '(' expr ')' bloque_o_sent ('else' bloque_o_sent)?
-  while_stmt   → 'while' '(' expr ')' bloque_o_sent
-  do_while     → 'do' bloque 'while' '(' expr ')' ';'
-  for_stmt     → 'for' '(' (decl_for | asig_for | ';') expr? ';' expr? ')' bloque_o_sent
-  switch_stmt  → 'switch' '(' expr ')' '{' case* default? '}'
-  return_stmt  → 'return' expr? ';'
-  bloque       → '{' sentencia* '}'
-  expr         → asignacion_expr | logico_o
-  logico_o     → logico_y ('||' logico_y)*
-  logico_y     → igualdad ('&&' igualdad)*
-  igualdad     → comparacion (('=='|'!=') comparacion)*
-  comparacion  → suma (('<'|'>'|'<='|'>=') suma)*
-  suma         → termino (('+'|'-') termino)*
-  termino      → factor (('*'|'/'|'%') factor)*
-  unario       → ('!'|'-'|'+'|'++'|'--') factor | postfijo
-  factor       → NÚMERO | CADENA | BOOL | NULO
-               | IDENTIFICADOR ('(' args ')')? ('[' expr ']')*
-               | '(' expr ')'
+Gramática soportada (simplificada):
+  programa  → sentencia*
+  sentencia → decl | asig | if | while | for | do-while | switch
+            | return | break | continue | bloque | llamada';' | expr';'
+  expr      → ternario | asig_inline | logico_o
+  logico_o  → logico_y  ('||' logico_y)*
+  logico_y  → igualdad  ('&&' igualdad)*
+  igualdad  → comparacion (('=='|'!=') comparacion)*
+  comparacion → suma (('<'|'>'|'<='|'>=') suma)*
+  suma      → termino   (('+'|'-') termino)*
+  termino   → unario    (('*'|'/'|'%') unario)*
+  unario    → ('!'|'~'|'-'|'++'|'--') factor | postfijo
+  postfijo  → factor ('++'|'--'|'['expr']'|'.id')*
+  factor    → literal | '('expr')' | id'('args')' | id | kw
 """
 
 from typing import List, Optional, Tuple
 
-# TIPOS_PRIMITIVOS: conjunto de palabras clave que inician una declaración
-# (int, float, void…). Se importa desde tipos_token para mantener una
-# única fuente de verdad compartida con el léxico.
 from tipos_token import Token, TIPOS_PRIMITIVOS
 
 
-# ─────────────────────────────────────────────
-#  NODO DEL ÁRBOL SINTÁCTICO
-# ─────────────────────────────────────────────
+# ── Nodo del AST ──────────────────────────────────────────────────────────────
 
 class Nodo:
-    """
-    Nodo del AST (Árbol de Sintaxis Abstracta).
-
-    Cada nodo representa una construcción del lenguaje: un programa,
-    una función, una sentencia if, una expresión aritmética, un literal…
-
-    Atributos:
-        etiqueta — nombre descriptivo del nodo, ej: 'if', 'func int main',
-                   'asig =', '+', '42', 'resultado'.
-        hijos    — lista de Nodo hijos que forman la subestructura.
-                   Un nodo hoja (literal, identificador) tiene hijos = [].
-        linea    — línea del fuente donde aparece esta construcción,
-                   útil para mensajes de error y para la interfaz gráfica.
-    """
+    """Nodo del Árbol de Sintaxis Abstracta."""
 
     def __init__(self, etiqueta: str, hijos: list = None, linea: int = 0):
         self.etiqueta = etiqueta
-        # Se evita usar [] como valor por defecto en la firma porque en Python
-        # los valores mutables por defecto se comparten entre todas las llamadas.
         self.hijos    = hijos if hijos is not None else []
         self.linea    = linea
 
-    def __repr__(self):
-        """Representación compacta para depuración en el REPL."""
+    def __repr__(self) -> str:
         return f"Nodo({self.etiqueta!r}, hijos={len(self.hijos)})"
 
-    def __str__(self):
-        """Árbol completo en texto indentado, útil para volcados en consola."""
+    def __str__(self) -> str:
         return self._str_indent(0)
 
     def _str_indent(self, nivel: int) -> str:
-        """
-        Construye recursivamente la representación en árbol indentado.
-        Cada nivel añade dos espacios de sangría para mostrar la jerarquía.
-        Ejemplo para 'int x = 5;':
-            decl int
-              x
-              5
-        """
         indent    = "  " * nivel
         resultado = f"{indent}{self.etiqueta}"
         for hijo in self.hijos:
@@ -100,76 +45,43 @@ class Nodo:
         return resultado
 
 
-# ─────────────────────────────────────────────
-#  PARSER
-# ─────────────────────────────────────────────
-
-# Conjunto de valores de token que se usan como puntos de sincronización
-# durante la recuperación de errores. Cuando el parser encuentra un error,
-# avanza hasta el siguiente token de este conjunto para retomar el análisis
-# en un estado conocido y seguir reportando más errores en lugar de abortar.
+# ── Tokens de sincronización para recuperación de errores ────────────────────
 _SYNC_TOKENS = {'}', ';', 'if', 'while', 'for', 'return', 'int', 'float',
                 'string', 'bool', 'void', 'else', 'do', 'switch'}
 
 
-class Parser:
-    """
-    Analizador sintáctico por descenso recursivo.
+# ── Parser ────────────────────────────────────────────────────────────────────
 
-    Mantiene un cursor (pos) sobre la lista de tokens y avanza a medida
-    que va reconociendo construcciones gramaticales. Si encuentra algo
-    inesperado, registra el error y aplica recuperación de pánico para
-    continuar analizando el resto del código.
-    """
+class Parser:
+    """Analizador sintáctico por descenso recursivo predictivo."""
 
     def __init__(self, tokens: List[Token]):
         self.tokens  = tokens
-        self.pos     = 0                  # índice del token actual
+        self.pos     = 0
         self.errores: List[str] = []
-        self._panic_mode = False          # reservado para recuperación futura
 
-    # ══════════════════════════════════════════
-    #  UTILIDADES BÁSICAS
-    # ══════════════════════════════════════════
+    # ── Utilidades básicas ────────────────────────────────────────────────────
 
     def peek(self, offset: int = 0) -> Optional[Token]:
-        """
-        Devuelve el token en la posición actual + offset SIN consumirlo.
-        Permite mirar uno o dos tokens adelante para decidir qué regla aplicar.
-        Devuelve None si el offset apunta más allá del final de la lista.
-        """
+        """Token en pos+offset sin consumirlo; None si está fuera de rango."""
         idx = self.pos + offset
         return self.tokens[idx] if idx < len(self.tokens) else None
 
     def consume(self) -> Optional[Token]:
-        """
-        Devuelve el token actual y avanza el cursor al siguiente.
-        Es la única forma de "leer" un token del flujo.
-        Devuelve None si ya no quedan tokens.
-        """
+        """Devuelve el token actual y avanza el cursor."""
         tok = self.peek()
         if tok:
             self.pos += 1
         return tok
 
     def hay_mas(self) -> bool:
-        """True si el cursor aún apunta a un token válido."""
         return self.pos < len(self.tokens)
 
     def esperar(self, tipo: str, valor: str = None) -> Optional[Token]:
-        """
-        Versión estricta de consume(): consume el token si coincide con el
-        tipo (y valor, si se especifica), o registra un error de sintaxis
-        y devuelve None sin consumir nada.
-
-        Se usa cuando ese token es OBLIGATORIO para que la construcción
-        sea sintácticamente correcta, ej: esperar el ')' después de la
-        condición de un if.
-        """
+        """Consume el token si coincide; registra error y devuelve None si no."""
         tok = self.peek()
         if tok and tok.tipo == tipo and (valor is None or tok.valor == valor):
             return self.consume()
-        # Construir mensaje de error descriptivo con ubicación exacta
         ubicacion  = f"línea {tok.linea}, col {tok.columna}" if tok else "fin de archivo"
         esperado   = f"'{valor}'" if valor else tipo
         encontrado = f"'{tok.valor}' ({tok.tipo})" if tok else "EOF"
@@ -180,13 +92,7 @@ class Parser:
         return None
 
     def coincidir(self, tipo: str, valor: str = None) -> bool:
-        """
-        Versión permisiva de consume(): consume el token si coincide
-        y devuelve True, o devuelve False sin consumir ni registrar error.
-
-        Se usa para tokens OPCIONALES, ej: el ';' al final de algunas
-        construcciones donde es válido tanto incluirlo como omitirlo.
-        """
+        """Consume el token si coincide (token opcional); sin error si no."""
         tok = self.peek()
         if tok and tok.tipo == tipo and (valor is None or tok.valor == valor):
             self.consume()
@@ -194,43 +100,22 @@ class Parser:
         return False
 
     def val_es(self, *valores) -> bool:
-        """
-        True si el token actual tiene alguno de los valores indicados.
-        No consume el token. Útil para decisiones de tipo 'switch' sobre
-        el texto del token sin importar su categoría.
-        Ejemplo: self.val_es('+', '-') para detectar operadores de suma.
-        """
+        """True si el valor del token actual es alguno de los indicados."""
         tok = self.peek()
         return tok is not None and tok.valor in valores
 
     def tipo_es(self, *tipos) -> bool:
-        """
-        True si el token actual pertenece a alguno de los tipos indicados.
-        No consume el token. Útil cuando importa la categoría léxica
-        pero no el valor concreto.
-        Ejemplo: self.tipo_es('IDENTIFICADOR', 'LITERAL_NUM')
-        """
+        """True si el tipo del token actual es alguno de los indicados."""
         tok = self.peek()
         return tok is not None and tok.tipo in tipos
 
     def es_tipo_primitivo(self) -> bool:
-        """
-        True si el token actual es una palabra clave que puede iniciar
-        una declaración de variable o función (int, float, void, etc.).
-        Consulta TIPOS_PRIMITIVOS de tipos_token.py para no duplicar la lista.
-        """
+        """True si el token actual es una palabra clave de tipo (int, float…)."""
         tok = self.peek()
         return tok is not None and tok.tipo == 'PALABRA_CLAVE' and tok.valor in TIPOS_PRIMITIVOS
 
     def _sincronizar(self):
-        """
-        Recuperación de pánico: avanza el cursor descartando tokens hasta
-        encontrar uno que pertenezca a _SYNC_TOKENS (puntos de sincronización).
-
-        Se llama después de registrar un error para que el parser pueda
-        retomar el análisis en un estado gramaticalmente conocido y
-        seguir reportando más errores en lugar de detenerse en el primero.
-        """
+        """Recuperación de pánico: avanza hasta el próximo token de sincronización."""
         while self.hay_mas():
             tok = self.peek()
             if tok.valor in _SYNC_TOKENS or (
@@ -239,67 +124,40 @@ class Parser:
                 break
             self.consume()
 
-    # ══════════════════════════════════════════
-    #  EXPRESIONES
-    # ══════════════════════════════════════════
-    #
-    # Las expresiones se parsean siguiendo la jerarquía de precedencia
-    # de operadores de menor a mayor. Cada método llama al siguiente nivel
-    # para parsear su operando, luego revisa si hay operadores de su nivel
-    # y construye el nodo binario correspondiente.
-    #
-    # Jerarquía (de menor a mayor precedencia):
-    #   expr → logico_o → logico_y → igualdad → comparacion
-    #        → suma → termino → unario → postfijo → factor
-    #
-    # Esta estructura garantiza que, por ejemplo, '*' agrupe más fuerte
-    # que '+', y '+' más fuerte que '=='.
+    # ── Expresiones (de menor a mayor precedencia) ────────────────────────────
 
     def expr(self) -> Nodo:
-        """
-        Nivel raíz de expresión. Maneja:
-          - Asignación inline con cualquier operador (=, +=, -=…),
-            con asociatividad derecha: a = b = 5 → a = (b = 5).
-          - Operador ternario: condicion ? si_verdadero : si_falso.
-          - Todo lo demás se delega a logico_o().
-        """
+        """Raíz de expresión: maneja asignación inline y operador ternario."""
         izq = self.logico_o()
 
-        # Asignación inline (en contexto de expresión, ej: dentro de f(x = 5))
+        # Asignación inline (asociatividad derecha: a = b = 5 → a = (b = 5))
         if self.peek() and self.peek().tipo == 'OPERADOR_ASIG':
             op  = self.consume()
-            der = self.expr()   # llamada recursiva = asociatividad derecha
+            der = self.expr()
             return Nodo(f"asig {op.valor}", [izq, der], op.linea)
 
         # Operador ternario: cond ? entonces : sino
         if self.val_es('?'):
             self.consume()
             entonces = self.expr()
-            # coincidir primero para no duplicar el error si ya está consumido
-            self.esperar('DELIMITADOR', ':') if not self.coincidir('DELIMITADOR', ':') else None
+            if not self.coincidir('DELIMITADOR', ':'):
+                self.esperar('DELIMITADOR', ':')
             sino = self.expr()
             return Nodo('ternario', [izq, entonces, sino], izq.linea)
 
         return izq
 
     def logico_o(self) -> Nodo:
-        """
-        Operador || (OR lógico). Asociatividad izquierda.
-        Ejemplo: a || b || c → (a || b) || c
-        """
+        """|| con asociatividad izquierda."""
         izq = self.logico_y()
         while self.val_es('||'):
             op  = self.consume()
             der = self.logico_y()
-            izq = Nodo('||', [izq, der], op.linea)   # el nuevo nodo pasa a ser el izq
+            izq = Nodo('||', [izq, der], op.linea)
         return izq
 
     def logico_y(self) -> Nodo:
-        """
-        Operador && (AND lógico). Asociatividad izquierda.
-        Tiene mayor precedencia que ||: a || b && c → a || (b && c)
-        porque && se resuelve primero en su propio nivel.
-        """
+        """&& con asociatividad izquierda; mayor precedencia que ||."""
         izq = self.igualdad()
         while self.val_es('&&'):
             op  = self.consume()
@@ -308,10 +166,7 @@ class Parser:
         return izq
 
     def igualdad(self) -> Nodo:
-        """
-        Operadores == y != (comparación de igualdad). Asociatividad izquierda.
-        Se separan de comparacion() para que tengan menor precedencia que < > <= >=.
-        """
+        """== y != ; menor precedencia que los relacionales."""
         izq = self.comparacion()
         while self.val_es('==', '!='):
             op  = self.consume()
@@ -320,10 +175,7 @@ class Parser:
         return izq
 
     def comparacion(self) -> Nodo:
-        """
-        Operadores relacionales < > <= >= (orden). Asociatividad izquierda.
-        Mayor precedencia que == y !=.
-        """
+        """< > <= >= ; mayor precedencia que == y !=."""
         izq = self.suma()
         while self.val_es('<', '>', '<=', '>='):
             op  = self.consume()
@@ -332,10 +184,7 @@ class Parser:
         return izq
 
     def suma(self) -> Nodo:
-        """
-        Operadores + y - (adición/sustracción). Asociatividad izquierda.
-        Mayor precedencia que los relacionales.
-        """
+        """+ y - ; mayor precedencia que los relacionales."""
         izq = self.termino()
         while self.val_es('+', '-'):
             op  = self.consume()
@@ -344,10 +193,7 @@ class Parser:
         return izq
 
     def termino(self) -> Nodo:
-        """
-        Operadores * / % (multiplicación/división/módulo). Asociatividad izquierda.
-        Mayor precedencia que + y -: 2 + 3 * 4 → 2 + (3 * 4).
-        """
+        """* / % ; mayor precedencia que + y -."""
         izq = self.unario()
         while self.val_es('*', '/', '%'):
             op  = self.consume()
@@ -356,30 +202,21 @@ class Parser:
         return izq
 
     def unario(self) -> Nodo:
-        """
-        Operadores unarios prefijos: !, ~, negación aritmética (-), ++x, --x.
-
-        El caso de '-' necesita cuidado: solo es unario si NO va precedido
-        de otro operando (ej: en '5 - 3', el '-' es binario y lo maneja suma();
-        aquí solo llegamos cuando no hay operando a la izquierda).
-        peek(1) mira el token SIGUIENTE al '-' para evitar confusión con '--'.
-        """
+        """Operadores prefijos: !, ~, negación aritmética, ++x, --x."""
         tok = self.peek()
         if tok is None:
-            return Nodo('ε')    # ε = nodo vacío, señal de expresión ausente
+            return Nodo('ε')
 
-        # ! (negación lógica) y ~ (complemento a bits)
         if tok.valor in ('!', '~'):
             self.consume()
             return Nodo(f'unario {tok.valor}', [self.unario()], tok.linea)
 
-        # Negación aritmética unaria: -x, -(a+b)
-        # La guarda evita confundir con el operador '--'
+        # '-' unario: evitar confundir con '--'
         if tok.valor == '-' and (self.peek(1) is None or self.peek(1).valor not in ('+', '-')):
             self.consume()
             return Nodo('neg', [self.unario()], tok.linea)
 
-        # Pre-incremento / pre-decremento: ++x, --x
+        # Pre-incremento / decremento
         if tok.tipo == 'OPERADOR_INCR':
             op = self.consume()
             return Nodo(f'pre{op.valor}', [self.factor()], op.linea)
@@ -387,31 +224,20 @@ class Parser:
         return self.postfijo()
 
     def postfijo(self) -> Nodo:
-        """
-        Operadores postfijos que modifican una expresión ya parseada:
-          - x++ / x--   (post-incremento / post-decremento)
-          - arr[i]      (acceso a elemento de array)
-          - obj.campo   (acceso a miembro de objeto/struct)
-
-        El bucle while permite encadenarlos: arr[i].campo++ se parsea
-        como (((arr)[i]).campo)++
-        """
+        """x++, x--, arr[i], obj.campo — encadenables."""
         nodo = self.factor()
         while True:
             tok = self.peek()
             if tok is None:
                 break
-            # Post-incremento / decremento: el nodo anterior pasa a ser el operando
             if tok.tipo == 'OPERADOR_INCR':
                 op   = self.consume()
                 nodo = Nodo(f'post{op.valor}', [nodo], op.linea)
-            # Indexación de array: expr[índice]
             elif tok.valor == '[':
                 self.consume()
                 idx  = self.expr()
                 self.esperar('DELIMITADOR', ']')
                 nodo = Nodo('índice', [nodo, idx], tok.linea)
-            # Acceso a miembro: expr.nombre
             elif tok.valor == '.':
                 self.consume()
                 miembro = self.esperar('IDENTIFICADOR')
@@ -422,93 +248,68 @@ class Parser:
         return nodo
 
     def factor(self) -> Nodo:
-        """
-        Unidad atómica de una expresión (el nivel más bajo de precedencia).
-        Reconoce:
-          - Literales numéricos, de cadena, booleanos y nulos.
-          - Cast de tipo: (int) expr
-          - Expresiones agrupadas entre paréntesis: (expr)
-          - Identificadores solos: x
-          - Llamadas a función: f(arg1, arg2)
-          - Palabras clave usadas como valor (null, true… ya reclasificadas).
-        Si no reconoce nada, devuelve un nodo ε sin consumir el token,
-        para evitar bucles infinitos.
-        """
+        """Unidad atómica: literal, (expr), id, llamada, cast, kw-valor."""
         tok = self.peek()
         if tok is None:
             return Nodo('ε')
 
-        # Literales: se crea un nodo hoja con el texto exacto del token
-        if tok.tipo in ('LITERAL_NUM', 'LITERAL_CADENA',
-                        'LITERAL_BOOLEANO', 'LITERAL_NULO'):
+        # Literales
+        if tok.tipo in ('LITERAL_NUM', 'LITERAL_CADENA', 'LITERAL_BOOLEANO', 'LITERAL_NULO'):
             self.consume()
             return Nodo(tok.valor, [], tok.linea)
 
-        # Cast explícito de tipo: (int)expr, (float)x
-        # Se detecta mirando tres tokens adelante: '(' tipo ')'
+        # Cast: (tipo)expr — detectado mirando tres tokens adelante
         if tok.valor == '(' and self.peek(1) and self.peek(1).valor in TIPOS_PRIMITIVOS:
             sig = self.peek(2)
             if sig and sig.valor == ')':
-                self.consume()              # consume '('
-                tipo_cast = self.consume()  # consume el tipo
-                self.consume()              # consume ')'
+                self.consume()              # '('
+                tipo_cast = self.consume()  # tipo
+                self.consume()              # ')'
                 return Nodo(f'cast({tipo_cast.valor})', [self.unario()], tok.linea)
 
-        # Expresión entre paréntesis para agrupar y cambiar precedencia
+        # Expresión agrupada
         if tok.valor == '(':
             self.consume()
-            if self.val_es(')'):    # paréntesis vacíos: ()
+            if self.val_es(')'):
                 self.consume()
                 return Nodo('()', [], tok.linea)
             nodo = self.expr()
             self.esperar('DELIMITADOR', ')')
             return nodo
 
-        # Identificador solo o llamada a función
+        # Identificador o llamada a función
         if tok.tipo == 'IDENTIFICADOR':
             self.consume()
-            if self.val_es('('):    # si le sigue '(' es una llamada a función
+            if self.val_es('('):
                 self.consume()
                 args = self._args()
                 self.esperar('DELIMITADOR', ')')
                 return Nodo(f"{tok.valor}(...)", args, tok.linea)
-            return Nodo(tok.valor, [], tok.linea)   # identificador simple
+            return Nodo(tok.valor, [], tok.linea)
 
-        # Palabras clave que en este contexto son valores (ya reclasificadas)
+        # Palabras clave usadas como valor (ya reclasificadas por el léxico)
         if tok.tipo == 'PALABRA_CLAVE':
             self.consume()
             return Nodo(tok.valor, [], tok.linea)
 
-        # Nada reconocido: devolver nodo vacío SIN consumir para no perder el token
-        return Nodo('ε')
+        return Nodo('ε')   # nada reconocido — no consumir para evitar bucles
 
     def _args(self) -> List[Nodo]:
-        """
-        Parsea la lista de argumentos de una llamada a función: arg1, arg2, …
-        Se detiene al encontrar ')' o al acabar los tokens.
-        Cada argumento es una expresión completa; las comas son separadores.
-        """
+        """Lista de argumentos separados por coma hasta encontrar ')'."""
         args = []
         while self.hay_mas() and not self.val_es(')'):
             args.append(self.expr())
             if not self.coincidir('DELIMITADOR', ','):
-                break   # sin coma → no hay más argumentos
+                break
         return args
 
-    # ══════════════════════════════════════════
-    #  SENTENCIAS
-    # ══════════════════════════════════════════
+    # ── Sentencias ────────────────────────────────────────────────────────────
 
     def bloque(self) -> Nodo:
-        """
-        Parsea un bloque de código delimitado por llaves: { sentencia* }
-        Un bloque puede contener cero o más sentencias.
-        Se usa como cuerpo de funciones, if, while, for, do-while y switch.
-        """
+        """{ sentencia* } — cuerpo de funciones, if, while, for…"""
         tok_inicio = self.peek()
         self.esperar('DELIMITADOR', '{')
         hijos = []
-        # Leer sentencias hasta encontrar '}' o agotar los tokens
         while self.hay_mas() and not self.val_es('}'):
             s = self.sentencia()
             if s:
@@ -517,30 +318,17 @@ class Parser:
         return Nodo('bloque', hijos, tok_inicio.linea if tok_inicio else 0)
 
     def bloque_o_sent(self) -> Nodo:
-        """
-        Permite que if/while/for acepten tanto un bloque con llaves
-        como una sentencia simple sin llaves.
-        Ejemplo con llaves:   if (x) { y = 1; z = 2; }
-        Ejemplo sin llaves:   if (x) y = 1;
-        Sin este método, el parser anterior crasheaba con la segunda forma.
-        """
+        """Permite cuerpo con llaves ({ }) o sentencia simple sin llaves."""
         if self.val_es('{'):
             return self.bloque()
         s = self.sentencia()
         return s if s else Nodo('ε')
 
     def sentencia(self) -> Optional[Nodo]:
-        """
-        Punto de entrada para parsear cualquier sentencia.
-        Actúa como cortafuegos: envuelve _sentencia_impl() en un try/except
-        para que cualquier excepción inesperada durante el parseo sea
-        capturada, registrada como error y el análisis pueda continuar
-        con la siguiente sentencia tras sincronizar el cursor.
-        """
+        """Envuelve _sentencia_impl en try/except para recuperarse de errores."""
         tok = self.peek()
         if tok is None or tok.valor == '}':
             return None
-
         try:
             return self._sentencia_impl()
         except Exception as exc:
@@ -550,19 +338,12 @@ class Parser:
             return None
 
     def _sentencia_impl(self) -> Optional[Nodo]:
-        """
-        Implementación real del reconocimiento de sentencias.
-        Mira el token actual y despacha al método correspondiente según
-        la palabra clave o el tipo de token. El orden de los if importa:
-        las construcciones más específicas van primero.
-        """
+        """Despacha al método correcto según el token actual."""
         tok = self.peek()
         if tok is None or tok.valor == '}':
             return None
 
-        # ── if ──────────────────────────────────────────────────────────────
-        # Estructura: if (condición) bloque_o_sent [else bloque_o_sent]
-        # El else es opcional; si existe, se incluye como tercer hijo del nodo.
+        # if
         if tok.tipo == 'PALABRA_CLAVE' and tok.valor == 'if':
             self.consume()
             self.esperar('DELIMITADOR', '(')
@@ -575,8 +356,7 @@ class Parser:
                 hijos.append(Nodo('else', [self.bloque_o_sent()], tok.linea))
             return Nodo('if', hijos, tok.linea)
 
-        # ── while ────────────────────────────────────────────────────────────
-        # Estructura: while (condición) bloque_o_sent
+        # while
         if tok.tipo == 'PALABRA_CLAVE' and tok.valor == 'while':
             self.consume()
             self.esperar('DELIMITADOR', '(')
@@ -585,10 +365,7 @@ class Parser:
             cuerpo = self.bloque_o_sent()
             return Nodo('while', [Nodo('condición', [cond], tok.linea), cuerpo], tok.linea)
 
-        # ── do-while ─────────────────────────────────────────────────────────
-        # Estructura: do bloque while (condición) ;
-        # A diferencia del while, el cuerpo se ejecuta al menos una vez
-        # porque la condición se evalúa DESPUÉS del bloque.
+        # do-while
         if tok.tipo == 'PALABRA_CLAVE' and tok.valor == 'do':
             self.consume()
             cuerpo = self.bloque()
@@ -599,48 +376,35 @@ class Parser:
             self.coincidir('DELIMITADOR', ';')
             return Nodo('do-while', [cuerpo, Nodo('condición', [cond], tok.linea)], tok.linea)
 
-        # ── for ──────────────────────────────────────────────────────────────
-        # Estructura: for (init ; condición ; incremento) bloque_o_sent
-        # Los tres componentes son opcionales: for(;;) es un bucle infinito válido.
-        # El árbol resultante tiene cuatro hijos: init, cond, inc, cuerpo.
+        # for — init puede ser decl, asig o vacío
         if tok.tipo == 'PALABRA_CLAVE' and tok.valor == 'for':
             self.consume()
             self.esperar('DELIMITADOR', '(')
-
-            # init: puede ser una declaración ("int i = 0"), una asignación
-            # ("i = 0"), o estar vacío (";")
             init = None
             if not self.val_es(';'):
                 if self.es_tipo_primitivo():
-                    init = self._decl_variable()        # int i = 0;
+                    init = self._decl_variable()
                 elif self.peek() and self.peek().tipo == 'IDENTIFICADOR':
-                    init = self._asignacion_o_llamada() # i = 0;
+                    init = self._asignacion_o_llamada()
                 else:
-                    self.coincidir('DELIMITADOR', ';')  # otro caso: consumir ';'
-
-            # condición (opcional): si el próximo token ya es ';', está vacía
+                    self.coincidir('DELIMITADOR', ';')
             cond = Nodo('ε')
             if not self.val_es(';'):
                 cond = self.expr()
             self.esperar('DELIMITADOR', ';')
-
-            # incremento (opcional): si el próximo token ya es ')', está vacío
             inc = Nodo('ε')
             if not self.val_es(')'):
                 inc = self.expr()
             self.esperar('DELIMITADOR', ')')
-
             cuerpo = self.bloque_o_sent()
             return Nodo('for', [
                 Nodo('init', [init] if init else []),
                 Nodo('cond', [cond]),
                 Nodo('inc',  [inc]),
-                cuerpo
+                cuerpo,
             ], tok.linea)
 
-        # ── switch ───────────────────────────────────────────────────────────
-        # Estructura: switch (expr) { case valor: sentencias… default: sentencias… }
-        # Cada case y el default se convierten en nodos hijos del switch.
+        # switch
         if tok.tipo == 'PALABRA_CLAVE' and tok.valor == 'switch':
             self.consume()
             self.esperar('DELIMITADOR', '(')
@@ -655,7 +419,6 @@ class Parser:
                     val_case = self.expr()
                     self.esperar('DELIMITADOR', ':')
                     stmts = []
-                    # Las sentencias del case van hasta el siguiente case, default o '}'
                     while self.hay_mas() and not self.val_es('case', 'default', '}'):
                         s = self.sentencia()
                         if s:
@@ -671,76 +434,59 @@ class Parser:
                             stmts.append(s)
                     casos.append(Nodo('default', stmts, ct.linea))
                 else:
-                    self.consume()  # token inesperado dentro del switch: descartar
+                    self.consume()   # token inesperado dentro del switch
             self.esperar('DELIMITADOR', '}')
             return Nodo('switch', [Nodo('expr-sw', [expr_sw])] + casos, tok.linea)
 
-        # ── return ───────────────────────────────────────────────────────────
-        # Estructura: return [expr] ;
-        # El valor de retorno es opcional (ej: en funciones void).
+        # return [expr] ;
         if tok.tipo == 'PALABRA_CLAVE' and tok.valor == 'return':
             self.consume()
             if self.val_es(';'):
                 self.consume()
-                return Nodo('return', [], tok.linea)   # return sin valor
+                return Nodo('return', [], tok.linea)
             val = self.expr()
             self.coincidir('DELIMITADOR', ';')
             return Nodo('return', [val], tok.linea)
 
-        # ── break ────────────────────────────────────────────────────────────
-        # Sale del switch o bucle más cercano. No tiene expresión asociada.
+        # break
         if tok.tipo == 'PALABRA_CLAVE' and tok.valor == 'break':
             self.consume()
             self.coincidir('DELIMITADOR', ';')
             return Nodo('break', [], tok.linea)
 
-        # ── continue ─────────────────────────────────────────────────────────
-        # Salta a la siguiente iteración del bucle más cercano.
+        # continue
         if tok.tipo == 'PALABRA_CLAVE' and tok.valor == 'continue':
             self.consume()
             self.coincidir('DELIMITADOR', ';')
             return Nodo('continue', [], tok.linea)
 
-        # ── bloque anónimo ────────────────────────────────────────────────────
-        # Un bloque puede aparecer solo, sin encabezado de control de flujo.
+        # Bloque anónimo
         if tok.valor == '{':
             return self.bloque()
 
-        # ── declaración de tipo ───────────────────────────────────────────────
-        # Inicia con un tipo primitivo: int x; float y = 3.14; void f() { }
+        # Declaración de variable o función
         if self.es_tipo_primitivo():
             return self._decl_tipo()
 
-        # ── identificador: asignación, ++/--, llamada a función ──────────────
+        # Asignación, ++/--, llamada
         if tok.tipo == 'IDENTIFICADOR':
             return self._asignacion_o_llamada()
 
-        # ── punto y coma suelto (sentencia vacía) ─────────────────────────────
-        # Es sintácticamente válido en C/C++/Java: for(;;) usa esta regla.
+        # Sentencia vacía
         if tok.valor == ';':
             self.consume()
             return None
 
-        # ── expresión suelta ──────────────────────────────────────────────────
-        # Cualquier expresión usada como sentencia, ej: una llamada a función
-        # sin asignación cuyo resultado se descarta: printf("hola");
+        # Expresión suelta (ej: llamada a función como sentencia)
         e = self.expr()
         self.coincidir('DELIMITADOR', ';')
         return e
 
-    # ── Auxiliares de declaración / asignación ────────────────────────────────
+    # ── Auxiliares ────────────────────────────────────────────────────────────
 
     def _decl_tipo(self) -> Optional[Nodo]:
-        """
-        Parsea una declaración que empieza con un tipo primitivo.
-        Distingue entre declaración de variable y declaración de función
-        mirando si después del identificador hay un '(' o no.
-
-        También acepta palabras clave como nombre (ej: 'main', 'print')
-        porque en tipos_token.py están clasificadas como PALABRA_CLAVE,
-        no como IDENTIFICADOR.
-        """
-        tipo_tok = self.consume()   # consume el tipo (int, float, void…)
+        """Parsea declaración de variable o función tras consumir el tipo."""
+        tipo_tok = self.consume()
 
         # El nombre puede ser IDENTIFICADOR o PALABRA_CLAVE (ej: 'main')
         id_tok = self.peek()
@@ -751,52 +497,35 @@ class Parser:
             )
             self.coincidir('DELIMITADOR', ';')
             return None
+        self.consume()
 
-        self.consume()  # consume el nombre
-
-        # Si le sigue '(' es una función o prototipo
         if self.val_es('('):
+            # Función o prototipo
             self.consume()
             params = self._params_func()
             self.esperar('DELIMITADOR', ')')
-            # Prototipo: declaración sin cuerpo, termina en ';'
             if self.val_es(';'):
                 self.consume()
                 return Nodo(f"proto {tipo_tok.valor} {id_tok.valor}", params, tipo_tok.linea)
-            # Definición completa: con bloque de cuerpo
             cuerpo = self.bloque()
             return Nodo(f"func {tipo_tok.valor} {id_tok.valor}",
                         params + [cuerpo], tipo_tok.linea)
 
-        # Si no hay '(' es una declaración de variable
         return self._decl_variable_cont(tipo_tok, id_tok)
 
     def _decl_variable(self) -> Optional[Nodo]:
-        """
-        Alias de _decl_tipo() para claridad cuando se llama desde el init del for.
-        El for necesita parsear una declaración de variable sin ambigüedad con funciones.
-        """
+        """Alias de _decl_tipo() usado desde el init del for."""
         return self._decl_tipo()
 
     def _decl_variable_cont(self, tipo_tok: Token, id_tok: Token) -> Nodo:
-        """
-        Continúa parseando una declaración de variable después de que
-        'tipo' e 'identificador' ya han sido consumidos.
+        """Continúa una declaración de variable después de consumir tipo e id."""
+        hijos = [Nodo(id_tok.valor, [], id_tok.linea)]
 
-        Maneja:
-          - Inicializador opcional:       int x = 5;
-          - Declaración simple:           int x;
-          - Declaración múltiple:         int a = 1, b, c = 3;
-            Cada variable adicional se añade como un sub-nodo de declaración.
-        """
-        hijos = [Nodo(id_tok.valor, [], id_tok.linea)]  # primer identificador
-
-        # Inicializador opcional con '='
         if self.val_es('='):
             self.consume()
             hijos.append(self.expr())
 
-        # Variables adicionales separadas por coma en la misma declaración
+        # Declaración múltiple: int a = 1, b, c = 3;
         while self.val_es(','):
             self.consume()
             extra_id = self.esperar('IDENTIFICADOR')
@@ -811,15 +540,10 @@ class Parser:
         return Nodo(f"decl {tipo_tok.valor}", hijos, tipo_tok.linea)
 
     def _params_func(self) -> List[Nodo]:
-        """
-        Parsea la lista de parámetros formales de una función: tipo id, tipo id, …
-        Cada parámetro se convierte en un nodo con etiqueta "tipo nombre".
-        Si el parámetro no tiene nombre (ej: en un prototipo como f(int, float))
-        se crea el nodo solo con el tipo.
-        """
+        """Parámetros formales de función: tipo id, tipo id, …"""
         params = []
         while self.hay_mas() and not self.val_es(')'):
-            pt = self.consume()   # tipo del parámetro
+            pt = self.consume()
             pi = self.peek()
             if pi and pi.tipo == 'IDENTIFICADOR':
                 self.consume()
@@ -831,19 +555,10 @@ class Parser:
         return params
 
     def _asignacion_o_llamada(self) -> Optional[Nodo]:
-        """
-        Parsea las sentencias que empiezan con un identificador:
-          - Asignación simple o compuesta:  x = 5;  x += 3;
-          - Post-incremento / decremento:   x++;  i--;
-          - Llamada a función:              printf("hola");
-          - Acceso a miembro/índice + asignación: obj.campo = 1;  arr[i] = 2;
+        """Parsea sentencias que empiezan con IDENTIFICADOR."""
+        tok = self.consume()
 
-        Consume el identificador primero y luego decide qué construcción
-        es mirando el token siguiente.
-        """
-        tok = self.consume()   # consume el IDENTIFICADOR
-
-        # Asignación simple (=) o compuesta (+=, -=, *=, …)
+        # Asignación simple o compuesta
         if self.peek() and self.peek().tipo == 'OPERADOR_ASIG':
             op  = self.consume()
             val = self.expr()
@@ -851,13 +566,13 @@ class Parser:
             return Nodo(f"asig {op.valor}",
                         [Nodo(tok.valor, [], tok.linea), val], tok.linea)
 
-        # Post-incremento o decremento como sentencia: x++;  i--;
+        # Post-incremento/decremento como sentencia
         if self.peek() and self.peek().tipo == 'OPERADOR_INCR':
             op = self.consume()
             self.coincidir('DELIMITADOR', ';')
             return Nodo(f"post{op.valor}", [Nodo(tok.valor, [], tok.linea)], tok.linea)
 
-        # Llamada a función: nombre(arg1, arg2, …)
+        # Llamada a función
         if self.val_es('('):
             self.consume()
             args = self._args()
@@ -865,9 +580,7 @@ class Parser:
             self.coincidir('DELIMITADOR', ';')
             return Nodo(f"llamada {tok.valor}", args, tok.linea)
 
-        # Acceso encadenado a miembro (.) o índice ([]) antes de la asignación.
-        # El bucle permite: obj.a.b[0] = val; — cada operador de acceso
-        # envuelve al anterior como hijo, construyendo el árbol de abajo arriba.
+        # Acceso encadenado (. o []) antes de asignación: obj.a[0] = val;
         nodo_izq = Nodo(tok.valor, [], tok.linea)
         changed  = True
         while changed:
@@ -885,31 +598,22 @@ class Parser:
                 nodo_izq = Nodo('índice', [nodo_izq, idx], tok.linea)
                 changed  = True
 
-        # Asignación al resultado del acceso encadenado
         if self.peek() and self.peek().tipo == 'OPERADOR_ASIG':
             op  = self.consume()
             val = self.expr()
             self.coincidir('DELIMITADOR', ';')
             return Nodo(f"asig {op.valor}", [nodo_izq, val], tok.linea)
 
-        # Identificador suelto (sin operador siguiente): consumir ';' y devolver
         self.coincidir('DELIMITADOR', ';')
         return nodo_izq
 
-    # ══════════════════════════════════════════
-    #  PROGRAMA
-    # ══════════════════════════════════════════
+    # ── Punto de entrada ──────────────────────────────────────────────────────
 
     def parsear(self) -> Tuple[Nodo, List[str]]:
         """
-        Punto de entrada del parser. Parsea el programa completo como
-        una secuencia de sentencias de nivel superior (funciones, variables
-        globales…) y devuelve la raíz del AST.
-
-        Incluye una protección contra bucles infinitos: si tras llamar a
-        sentencia() el cursor no avanzó, significa que el token actual no
-        pudo ser parseado por ninguna regla. En ese caso se registra el
-        error y se fuerza el avance consumiendo el token problemático.
+        Parsea el programa completo y devuelve (nodo_raíz, errores).
+        Si tras sentencia() el cursor no avanzó, descarta el token
+        problemático para evitar un bucle infinito.
         """
         hijos = []
         while self.hay_mas():
@@ -917,8 +621,6 @@ class Parser:
             s = self.sentencia()
             if s:
                 hijos.append(s)
-            # Si el cursor no avanzó, el token no encajó en ninguna regla:
-            # registrar error y consumir para no quedar atrapado.
             if self.pos == pos_antes and self.hay_mas():
                 tok_stuck = self.peek()
                 self.errores.append(
@@ -929,18 +631,8 @@ class Parser:
         return Nodo('programa', hijos), self.errores
 
 
-# ─────────────────────────────────────────────
-#  FUNCIÓN DE ACCESO RÁPIDO
-# ─────────────────────────────────────────────
+# ── Función pública ───────────────────────────────────────────────────────────
 
 def analizar_sintactico(tokens: List[Token]) -> Tuple[Nodo, List[str]]:
-    """
-    Interfaz pública del módulo. Recibe la lista completa de tokens
-    producida por analizar_completo() y devuelve:
-      - El nodo raíz 'programa' del AST construido.
-      - La lista de mensajes de error sintáctico encontrados.
-
-    Instancia el Parser internamente para que el llamador no tenga que
-    conocer los detalles de implementación de la clase.
-    """
+    """Interfaz pública: recibe tokens completos y devuelve (AST, errores)."""
     return Parser(tokens).parsear()

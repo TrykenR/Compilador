@@ -9,9 +9,6 @@ Recorre el AST producido por el parser sintáctico y verifica:
   5. Uso de return dentro de funciones (y tipo de retorno).
   6. Variables declaradas pero nunca usadas (advertencia).
   7. Operaciones con tipos incompatibles (ej: string + int).
-
-Expone una función pública:
-    analizar_semantico(arbol, tokens) → (tabla_simbolos, advertencias, errores)
 """
 
 from typing import List, Dict, Tuple, Optional
