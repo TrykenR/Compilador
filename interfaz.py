@@ -1,16 +1,3 @@
-"""
-interfaz.py — Interfaz gráfica de escritorio del Compilador.
-
-Construye una ventana Tkinter con dos paneles principales:
-  - Panel izquierdo: editor de código fuente con numeración de líneas.
-  - Panel derecho:   resultados del análisis en cinco pestañas:
-      · Tokens       — tabla de tokens únicos con frecuencia visual.
-      · Estadísticas — tarjetas de resumen y gráfico de barras por categoría.
-      · Árbol Sint.  — visualización gráfica del AST sobre un canvas scrollable.
-      · Semántico    — tabla de símbolos, advertencias y errores semánticos.
-      · Errores      — lista de errores léxicos y sintácticos con colores.
-"""
-
 import sys
 import os
 import tkinter as tk
@@ -574,18 +561,15 @@ class Compilador(tk.Tk):
                     if not nodo.hijos:
                         anchos[id(nodo)] = NODE_W
                     else:
-                        # === AQUÍ ESTÁ LA CORRECCIÓN ===
-                        # Cambiamos reversed → orden normal para que quede "al revés" del anterior
                         total  = sum(anchos[id(h)] for h in nodo.hijos)
                         total += H_GAP * (len(nodo.hijos) - 1)
                         anchos[id(nodo)] = max(total, NODE_W)
                 else:
                     pila.append((nodo, True))
-                    # === CAMBIO PRINCIPAL ===
-                    for hijo in nodo.hijos:          # ← antes estaba reversed
+                    for hijo in reversed(nodo.hijos):
                         pila.append((hijo, False))
 
-            # Posicionamiento (también en orden normal)
+            # Posicionamiento
             cola = [(root, 0, 20)]
             while cola:
                 nodo, prof, x_ini = cola.pop(0)
@@ -594,7 +578,9 @@ class Compilador(tk.Tk):
                 posiciones[id(nodo)] = (x_centro - NODE_W // 2, cy)
 
                 x_cursor = x_ini
-                for hijo in nodo.hijos:              # ← también aquí orden normal
+                # Orden especial para asignaciones
+                hijos = nodo.hijos if nodo.etiqueta.startswith('asig') else reversed(nodo.hijos)
+                for hijo in hijos:
                     cola.append((hijo, prof + 1, x_cursor))
                     x_cursor += anchos[id(hijo)] + H_GAP
 
@@ -614,9 +600,9 @@ class Compilador(tk.Tk):
         canvas.configure(scrollregion=(0, 0, total_w, total_h))
 
         raiz_x = posiciones[id(raiz)][0]
-        fraccion_inicio = max(0.0, (raiz_x - 20) / total_w)
-        canvas.xview_moveto(fraccion_inicio)
+        canvas.xview_moveto(max(0.0, (raiz_x - 20) / total_w))
 
+        # ==================== DIBUJAR LÍNEAS ====================
         pila = [raiz]
         while pila:
             nodo = pila.pop()
@@ -625,7 +611,9 @@ class Compilador(tk.Tk):
             px, py = posiciones[id(nodo)]
             pcx = px + NODE_W // 2
             pcy = py + NODE_H
-            for hijo in nodo.hijos:
+
+            hijos = nodo.hijos if nodo.etiqueta.startswith('asig') else reversed(nodo.hijos)
+            for hijo in hijos:
                 if id(hijo) not in posiciones:
                     continue
                 hx, hy = posiciones[id(hijo)]
@@ -633,6 +621,7 @@ class Compilador(tk.Tk):
                 canvas.create_line(pcx, pcy, hcx, hy, fill="#888888", width=1)
                 pila.append(hijo)
 
+        # ==================== DIBUJAR NODOS ====================
         pila = [raiz]
         while pila:
             nodo = pila.pop()
@@ -643,6 +632,7 @@ class Compilador(tk.Tk):
             if len(etq) > 16:
                 etq = etq[:15] + "…"
 
+            # Colores según tipo de nodo
             if nodo.etiqueta == "programa":
                 bg_col, fg_col, borde = "#000000", "#ffffff", "#000000"
             elif nodo.etiqueta == "bloque":
@@ -664,7 +654,10 @@ class Compilador(tk.Tk):
             canvas.create_text(x + NODE_W // 2, y + NODE_H // 2,
                                text=etq, font=("Courier New", 9),
                                fill=fg_col, anchor="center")
-            for hijo in nodo.hijos:
+            
+            # Orden de dibujo de hijos
+            hijos = nodo.hijos if nodo.etiqueta.startswith('asig') else reversed(nodo.hijos)
+            for hijo in hijos:
                 pila.append(hijo)
 
         if errores:
@@ -841,20 +834,10 @@ class Compilador(tk.Tk):
     @staticmethod
     def _ejemplo():
         return """\
-def main():
-    b = 0
-    if b == 0:
-        return "NO SE PUEDE DIVIDIR ENTRE 0"
-    else:
-        resultado = dividir(10, b)
-        print("Resultado:", resultado)
-    
-    for i in range(10):
-        resultado += i
-    return 0
-
-if __name__ == "__main__":
-    main()
+a = 0
+print(a)
+b
+c = 0
 """
 
 
