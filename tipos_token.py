@@ -1,22 +1,64 @@
 """tipos_token.py — Clase Token y vocabulario del lenguaje Python."""
 
 from dataclasses import dataclass
-from typing import Optional
 
 # ── Vocabulario Python ───────────────────────────────────────────────────────
 
+# Palabras clave estructurales del lenguaje (control de flujo, definición, etc.)
+# NOTA: True, False, None se clasifican como literales, no como palabras clave.
+#       and, or, not se clasifican como OPERADOR_LOG (ya los captura reglas.py).
 PALABRAS_CLAVE = {
-    'False', 'None', 'True', 'and', 'as', 'assert', 'async', 'await', 'break',
+    'as', 'assert', 'async', 'await', 'break',
     'class', 'continue', 'def', 'del', 'elif', 'else', 'except', 'finally',
     'for', 'from', 'global', 'if', 'import', 'in', 'is', 'lambda', 'nonlocal',
-    'not', 'or', 'pass', 'raise', 'return', 'try', 'while', 'with', 'yield'
+    'pass', 'raise', 'return', 'try', 'while', 'with', 'yield',
 }
 
-LITERALES_BOOLEANOS = {'True', 'False', 'true', 'false'}
-LITERALES_NULOS = {'None', 'null', 'nil'}
+LITERALES_BOOLEANOS = {'True', 'False'}
+LITERALES_NULOS     = {'None'}
 
-# Tipos comunes usados en hints y declaraciones (para semántico)
+# Tipos primitivos usados en hints (para el semántico)
 TIPOS_PRIMITIVOS = {'int', 'float', 'str', 'bool', 'list', 'dict', 'tuple', 'set', 'None'}
+
+# Funciones y clases builtin de Python
+BUILTINS = {
+    # I/O
+    'print', 'input',
+    # Tipos / conversión
+    'int', 'float', 'str', 'bool', 'bytes', 'bytearray',
+    'list', 'tuple', 'set', 'frozenset', 'dict',
+    'complex', 'memoryview',
+    # Iteración y secuencias
+    'range', 'enumerate', 'zip', 'map', 'filter', 'reversed', 'sorted',
+    'iter', 'next', 'slice',
+    # Numéricos y comparación
+    'abs', 'divmod', 'pow', 'round', 'max', 'min', 'sum',
+    # Introspección y atributos
+    'type', 'isinstance', 'issubclass', 'id', 'hash', 'dir', 'vars',
+    'getattr', 'setattr', 'delattr', 'hasattr', 'callable',
+    # Objetos y clases
+    'object', 'super', 'property', 'classmethod', 'staticmethod',
+    # Cadenas y representación
+    'repr', 'ascii', 'chr', 'ord', 'format', 'bin', 'oct', 'hex',
+    # Colecciones y funcionales
+    'len', 'any', 'all', 'open', 'eval', 'exec', 'compile',
+    # Módulos e importación
+    '__import__', 'globals', 'locals',
+    # Errores comunes (usados como identificadores frecuentes)
+    'Exception', 'ValueError', 'TypeError', 'KeyError', 'IndexError',
+    'AttributeError', 'RuntimeError', 'StopIteration', 'NotImplementedError',
+    'OSError', 'IOError', 'FileNotFoundError', 'PermissionError',
+    'OverflowError', 'ZeroDivisionError', 'MemoryError', 'RecursionError',
+    'AssertionError', 'ImportError', 'ModuleNotFoundError',
+    'NameError', 'UnboundLocalError', 'SyntaxError', 'IndentationError',
+    'UnicodeError', 'UnicodeDecodeError', 'UnicodeEncodeError',
+    'GeneratorExit', 'SystemExit', 'KeyboardInterrupt',
+    'BaseException', 'ArithmeticError', 'LookupError', 'BufferError',
+    # Constantes builtin
+    'NotImplemented', 'Ellipsis', '__debug__',
+    # Misc
+    'breakpoint', 'help', 'quit', 'exit',
+}
 
 
 @dataclass

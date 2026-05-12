@@ -1,7 +1,7 @@
 import sys
 import os
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk
 from typing import List
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -15,15 +15,16 @@ from semantico import analizar_semantico
 #  PALETA DE COLORES Y TIPOGRAFÍA
 # ══════════════════════════════════════════════════════════════════════════════
 
-BG      = "#ffffff"
-FG      = "#000000"
+BG      = "#1e1e2e"   # fondo editor (oscuro)
+BG_UI   = "#ffffff"   # fondo UI general
+FG      = "#cdd6f4"   # texto base del editor
 SURFACE = "#f0f0f0"
-BORDER  = "#000000"
-MUTED   = "#555555"
-ACCENT  = "#000000"
+BORDER  = "#d0d0d0"
+MUTED   = "#666666"
+ACCENT  = "#1a1a2e"
 BTN_FG  = "#ffffff"
-SEL_BG  = "#000000"
-SEL_FG  = "#ffffff"
+SEL_BG  = "#44475a"
+SEL_FG  = "#f8f8f2"
 
 MONO    = ("Courier New", 11)
 MONO_SM = ("Courier New", 10)
@@ -31,29 +32,64 @@ MONO_LG = ("Courier New", 12)
 SANS    = ("Helvetica", 10)
 SANS_B  = ("Helvetica", 10, "bold")
 
-
 # ══════════════════════════════════════════════════════════════════════════════
-#  ESTILOS VISUALES POR TIPO DE TOKEN
+#  COLORES SYNTAX HIGHLIGHTING
+#  Paleta Dracula / VS Code Dark+:
+#    Palabras clave estructurales → púrpura bold   #bd93f9
+#    Builtins (print, len, range) → cian           #8be9fd
+#    Identificadores usuario      → blanco humo    #f8f8f2
+#    Números                      → naranja        #ffb86c
+#    Cadenas                      → verde          #50fa7b
+#    Booleanos / None             → naranja bold   #ffb86c bold
+#    Operadores                   → rosa           #ff79c6
+#    Operadores lógicos           → púrpura bold   #bd93f9
+#    Delimitadores                → gris claro     #cccccc
+#    Comentarios                  → gris azulado   #6272a4 italic
+#    Errores                      → rojo           #ff5555
 # ══════════════════════════════════════════════════════════════════════════════
 
-TOKEN_TAGS = {
-    "PALABRA_CLAVE":    {"font": ("Courier New", 11, "bold"),   "foreground": "#000000"},
-    "IDENTIFICADOR":    {"font": ("Courier New", 11),           "foreground": "#000000"},
-    "LITERAL_NUM":      {"font": ("Courier New", 11),           "foreground": "#333333"},
-    "LITERAL_CADENA":   {"font": ("Courier New", 11, "italic"), "foreground": "#333333"},
-    "LITERAL_BOOLEANO": {"font": ("Courier New", 11, "bold"),   "foreground": "#000000"},
-    "LITERAL_NULO":     {"font": ("Courier New", 11, "italic"), "foreground": "#555555"},
-    "OPERADOR_ASIG":    {"font": ("Courier New", 11, "bold"),   "foreground": "#000000"},
-    "OPERADOR_REL":     {"font": ("Courier New", 11, "bold"),   "foreground": "#000000"},
-    "OPERADOR_LOG":     {"font": ("Courier New", 11, "bold"),   "foreground": "#000000"},
-    "OPERADOR_ARIT":    {"font": ("Courier New", 11),           "foreground": "#000000"},
-    "OPERADOR_INCR":    {"font": ("Courier New", 11, "bold"),   "foreground": "#000000"},
-    "OPERADOR_BIT":     {"font": ("Courier New", 11),           "foreground": "#444444"},
-    "DELIMITADOR":      {"font": ("Courier New", 11),           "foreground": "#555555"},
-    "DESCONOCIDO":      {"font": ("Courier New", 11),           "foreground": "#ff0000"},
+SH: dict = {
+    "PALABRA_CLAVE":    {"foreground": "#bd93f9", "font": ("Courier New", 12, "bold")},
+    "BUILTIN":          {"foreground": "#8be9fd", "font": ("Courier New", 12)},
+    "IDENTIFICADOR":    {"foreground": "#f8f8f2", "font": ("Courier New", 12)},
+    "LITERAL_NUM":      {"foreground": "#ffb86c", "font": ("Courier New", 12)},
+    "LITERAL_CADENA":   {"foreground": "#50fa7b", "font": ("Courier New", 12)},
+    "LITERAL_BOOLEANO": {"foreground": "#ffb86c", "font": ("Courier New", 12, "bold")},
+    "LITERAL_NULO":     {"foreground": "#ffb86c", "font": ("Courier New", 12, "italic")},
+    "OPERADOR_ASIG":    {"foreground": "#ff79c6", "font": ("Courier New", 12)},
+    "OPERADOR_REL":     {"foreground": "#ff79c6", "font": ("Courier New", 12)},
+    "OPERADOR_LOG":     {"foreground": "#bd93f9", "font": ("Courier New", 12, "bold")},
+    "OPERADOR_ARIT":    {"foreground": "#ff79c6", "font": ("Courier New", 12)},
+    "OPERADOR_INCR":    {"foreground": "#ff79c6", "font": ("Courier New", 12, "bold")},
+    "OPERADOR_BIT":     {"foreground": "#ff79c6", "font": ("Courier New", 12)},
+    "DELIMITADOR":      {"foreground": "#cccccc", "font": ("Courier New", 12)},
+    "COMENTARIO":       {"foreground": "#6272a4", "font": ("Courier New", 12, "italic")},
+    "DESCONOCIDO":      {"foreground": "#ff5555", "font": ("Courier New", 12)},
 }
 
-# Colores por categoría de símbolo en la tabla semántica
+# Color de barra en Estadísticas (mismo color que el editor para coherencia)
+CAT_COLOR: dict = {
+    "PALABRA_CLAVE":    "#bd93f9",
+    "BUILTIN":          "#8be9fd",
+    "IDENTIFICADOR":    "#f8f8f2",
+    "LITERAL_NUM":      "#ffb86c",
+    "LITERAL_CADENA":   "#50fa7b",
+    "LITERAL_BOOLEANO": "#ffb86c",
+    "LITERAL_NULO":     "#ffb86c",
+    "OPERADOR_ASIG":    "#ff79c6",
+    "OPERADOR_REL":     "#ff79c6",
+    "OPERADOR_LOG":     "#bd93f9",
+    "OPERADOR_ARIT":    "#ff79c6",
+    "OPERADOR_INCR":    "#ff79c6",
+    "OPERADOR_BIT":     "#ff79c6",
+    "DELIMITADOR":      "#888888",
+    "DESCONOCIDO":      "#ff5555",
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  ESTILOS SEMÁNTICOS
+# ══════════════════════════════════════════════════════════════════════════════
+
 SEM_TAGS = {
     "variable":  {"foreground": "#000000"},
     "funcion":   {"foreground": "#000000", "font": ("Courier New", 10, "bold")},
@@ -75,25 +111,27 @@ class Compilador(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Compilador — Léxico · Sintáctico · Semántico")
-        self.configure(bg=BG)
+        self.configure(bg=BG_UI)
         self.geometry("1280x720")
         self.minsize(960, 580)
         self._last_line_count = 0
+        self._highlight_job   = None
         self._build_ui()
         self._apply_style()
+        self.after(100, self._highlight_now)
 
     # ══════════════════════════════════════════════════════════════════════════
     #  CONSTRUCCIÓN DE LA UI
     # ══════════════════════════════════════════════════════════════════════════
 
     def _build_ui(self):
-        top = tk.Frame(self, bg=BG, pady=8, padx=16)
+        top = tk.Frame(self, bg=BG_UI, pady=8, padx=16)
         top.pack(fill="x", side="top")
 
         tk.Label(top, text="COMPILADOR", font=("Helvetica", 14, "bold"),
-                 bg=BG, fg=FG).pack(side="left")
+                 bg=BG_UI, fg="#1a1a2e").pack(side="left")
         tk.Label(top, text="  Léxico · Sintáctico · Semántico", font=("Helvetica", 10),
-                 bg=BG, fg=MUTED).pack(side="left")
+                 bg=BG_UI, fg=MUTED).pack(side="left")
 
         self.btn_run = tk.Button(
             top, text="▶  Analizar  (Ctrl+Enter)",
@@ -104,14 +142,14 @@ class Compilador(tk.Tk):
         self.btn_run.pack(side="right")
 
         tk.Button(
-            top, text="Limpiar", font=SANS, bg=SURFACE, fg=FG,
+            top, text="Limpiar", font=SANS, bg=SURFACE, fg="#1a1a2e",
             relief="flat", padx=10, pady=4, cursor="hand2",
             command=self.limpiar
         ).pack(side="right", padx=8)
 
         tk.Frame(self, bg=BORDER, height=1).pack(fill="x")
 
-        body = tk.Frame(self, bg=BG)
+        body = tk.Frame(self, bg=BG_UI)
         body.pack(fill="both", expand=True)
 
         self._build_editor(body)
@@ -134,37 +172,48 @@ class Compilador(tk.Tk):
         frame = tk.Frame(parent, bg=BG)
         frame.pack(side="left", fill="both", expand=True)
 
-        hdr = tk.Frame(frame, bg=SURFACE, pady=5, padx=12)
+        hdr = tk.Frame(frame, bg="#13131f", pady=5, padx=12)
         hdr.pack(fill="x")
         tk.Label(hdr, text="CÓDIGO FUENTE", font=MONO_SM,
-                 bg=SURFACE, fg=MUTED).pack(side="left")
+                 bg="#13131f", fg="#6272a4").pack(side="left")
         self.lbl_cursor = tk.Label(hdr, text="L1  C1", font=MONO_SM,
-                                   bg=SURFACE, fg=MUTED)
+                                   bg="#13131f", fg="#6272a4")
         self.lbl_cursor.pack(side="right")
 
         edit_frame = tk.Frame(frame, bg=BG)
         edit_frame.pack(fill="both", expand=True)
 
         self.line_nums = tk.Text(
-            edit_frame, width=4, bg=SURFACE, fg=MUTED,
+            edit_frame, width=4, bg="#13131f", fg="#44475a",
             font=MONO, state="disabled", relief="flat",
             padx=4, takefocus=False, cursor="arrow"
         )
         self.line_nums.pack(side="left", fill="y")
-        tk.Frame(edit_frame, bg=BORDER, width=1).pack(side="left", fill="y")
+        tk.Frame(edit_frame, bg="#44475a", width=1).pack(side="left", fill="y")
 
         self.editor = tk.Text(
             edit_frame, wrap="none", bg=BG, fg=FG,
             font=MONO_LG, relief="flat", padx=12, pady=8,
-            insertbackground=FG, selectbackground=SEL_BG,
-            selectforeground=SEL_FG, undo=True
+            insertbackground="#f8f8f2",
+            selectbackground=SEL_BG,
+            selectforeground=SEL_FG,
+            undo=True
         )
         self.editor.pack(side="left", fill="both", expand=True)
+
+        vsb = tk.Scrollbar(edit_frame, orient="vertical",
+                           command=self._on_vscroll)
+        vsb.pack(side="right", fill="y")
+        self.editor.configure(yscrollcommand=vsb.set)
 
         hscroll = tk.Scrollbar(frame, orient="horizontal",
                                command=self.editor.xview)
         hscroll.pack(fill="x")
         self.editor.configure(xscrollcommand=hscroll.set)
+
+        # Registrar todos los tags de syntax highlighting
+        for tipo, cfg in SH.items():
+            self.editor.tag_configure(tipo, **cfg)
 
         self.editor.insert("1.0", self._ejemplo())
 
@@ -178,8 +227,12 @@ class Compilador(tk.Tk):
 
         self._update_line_nums()
 
+    def _on_vscroll(self, *args):
+        self.editor.yview(*args)
+        self.line_nums.yview(*args)
+
     def _build_results(self, parent):
-        frame = tk.Frame(parent, bg=BG)
+        frame = tk.Frame(parent, bg=BG_UI)
         frame.pack(side="left", fill="both", expand=True)
 
         tab_bar = tk.Frame(frame, bg=SURFACE)
@@ -187,14 +240,13 @@ class Compilador(tk.Tk):
 
         self.tab_btns    = {}
         self.tab_frames  = {}
-        self.current_tab = tk.StringVar(value="tokens")
+        self.current_tab = tk.StringVar(value="stats")
 
         pestanas = [
-            ("tokens",   "Tokens"),
-            ("stats",    "Estadísticas"),
-            ("arbol",    "Árbol Sint."),
-            ("semantico","Semántico"),
-            ("errores",  "Errores"),
+            ("stats",     "Estadísticas"),
+            ("arbol",     "Árbol Sint."),
+            ("semantico", "Semántico"),
+            ("errores",   "Errores"),
         ]
 
         for nombre, label in pestanas:
@@ -209,84 +261,52 @@ class Compilador(tk.Tk):
 
         tk.Frame(tab_bar, bg=BORDER, height=1).pack(side="bottom", fill="x")
 
-        self.tab_frame = tk.Frame(frame, bg=BG)
+        self.tab_frame = tk.Frame(frame, bg=BG_UI)
         self.tab_frame.pack(fill="both", expand=True)
 
-        self._build_tab_tokens()
         self._build_tab_stats()
         self._build_tab_arbol()
         self._build_tab_semantico()
         self._build_tab_errores()
 
-        self._show_tab("tokens")
+        self._show_tab("stats")
 
     # ── Construcción de pestañas ──────────────────────────────────────────────
 
-    def _build_tab_tokens(self):
-        f = tk.Frame(self.tab_frame, bg=BG)
-        self.tab_frames["tokens"] = f
-
-        hdr = tk.Frame(f, bg=SURFACE, pady=4, padx=8)
-        hdr.pack(fill="x")
-        for txt, w in [("TIPO", 22), ("VALOR", 22), ("APARICIONES", 12)]:
-            tk.Label(hdr, text=txt, font=("Courier New", 9, "bold"),
-                     bg=SURFACE, fg=MUTED, width=w, anchor="w").pack(side="left")
-        tk.Frame(f, bg=BORDER, height=1).pack(fill="x")
-
-        list_frame = tk.Frame(f, bg=BG)
-        list_frame.pack(fill="both", expand=True)
-        vsb = tk.Scrollbar(list_frame, orient="vertical")
-        vsb.pack(side="right", fill="y")
-
-        self.token_list = tk.Text(
-            list_frame, wrap="none", bg=BG, fg=FG,
-            font=MONO_SM, relief="flat", padx=8, pady=4,
-            state="disabled", yscrollcommand=vsb.set,
-            cursor="arrow"
-        )
-        self.token_list.pack(fill="both", expand=True)
-        vsb.config(command=self.token_list.yview)
-
-        for tipo, cfg in TOKEN_TAGS.items():
-            self.token_list.tag_configure(tipo, **cfg)
-        self.token_list.tag_configure("muted",  foreground=MUTED)
-        self.token_list.tag_configure("sep",     foreground="#cccccc")
-        self.token_list.tag_configure("stripe",  background="#f8f8f8")
-
     def _build_tab_stats(self):
-        f = tk.Frame(self.tab_frame, bg=BG)
+        f = tk.Frame(self.tab_frame, bg=BG_UI)
         self.tab_frames["stats"] = f
 
-        self.cards_frame = tk.Frame(f, bg=BG, pady=12, padx=16)
+        self.cards_frame = tk.Frame(f, bg=BG_UI, pady=12, padx=16)
         self.cards_frame.pack(fill="x")
 
         tk.Frame(f, bg=BORDER, height=1).pack(fill="x", padx=16)
         tk.Label(f, text="DISTRIBUCIÓN POR CATEGORÍA",
-                 font=("Courier New", 9, "bold"), bg=BG, fg=MUTED,
+                 font=("Courier New", 9, "bold"), bg=BG_UI, fg=MUTED,
                  anchor="w", padx=16, pady=8).pack(fill="x")
 
-        bar_wrap = tk.Frame(f, bg=BG)
+        bar_wrap = tk.Frame(f, bg=BG_UI)
         bar_wrap.pack(fill="both", expand=True)
         vsb = tk.Scrollbar(bar_wrap, orient="vertical")
         vsb.pack(side="right", fill="y")
 
-        self.stats_canvas = tk.Canvas(bar_wrap, bg=BG, relief="flat",
+        self.stats_canvas = tk.Canvas(bar_wrap, bg=BG_UI, relief="flat",
                                       highlightthickness=0,
                                       yscrollcommand=vsb.set)
         self.stats_canvas.pack(fill="both", expand=True)
         vsb.config(command=self.stats_canvas.yview)
 
-        self.stats_inner = tk.Frame(self.stats_canvas, bg=BG)
+        self.stats_inner = tk.Frame(self.stats_canvas, bg=BG_UI)
         self.stats_canvas.create_window((0, 0), window=self.stats_inner, anchor="nw")
         self.stats_inner.bind("<Configure>",
             lambda e: self.stats_canvas.configure(
                 scrollregion=self.stats_canvas.bbox("all")))
 
     def _build_tab_arbol(self):
-        f = tk.Frame(self.tab_frame, bg=BG)
+        f = tk.Frame(self.tab_frame, bg=BG_UI)
         self.tab_frames["arbol"] = f
 
-        wrap = tk.Frame(f, bg=BG)
+        wrap = tk.Frame(f, bg=BG_UI)
         wrap.pack(fill="both", expand=True)
 
         vsb = tk.Scrollbar(wrap, orient="vertical")
@@ -295,7 +315,7 @@ class Compilador(tk.Tk):
         hsb.pack(side="bottom", fill="x")
 
         self.tree_canvas = tk.Canvas(
-            wrap, bg=BG, relief="flat", highlightthickness=0,
+            wrap, bg=BG_UI, relief="flat", highlightthickness=0,
             yscrollcommand=vsb.set, xscrollcommand=hsb.set
         )
         self.tree_canvas.pack(fill="both", expand=True)
@@ -306,16 +326,9 @@ class Compilador(tk.Tk):
             self.tree_canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
 
     def _build_tab_semantico(self):
-        """
-        Pestaña 'Semántico': dividida en dos zonas verticales.
-          - Zona superior: tabla de símbolos (nombre, tipo, categoría, línea).
-          - Zona inferior: advertencias y errores semánticos separados.
-        Misma estética que el resto: fondo blanco, monoespaciada, sin bordes.
-        """
-        f = tk.Frame(self.tab_frame, bg=BG)
+        f = tk.Frame(self.tab_frame, bg=BG_UI)
         self.tab_frames["semantico"] = f
 
-        # ── Cabecera tabla de símbolos ────────────────────────────────────────
         hdr = tk.Frame(f, bg=SURFACE, pady=4, padx=8)
         hdr.pack(fill="x")
         for txt, w in [("SÍMBOLO", 20), ("TIPO", 10), ("CATEGORÍA", 14), ("LÍNEA", 7), ("USADO", 7)]:
@@ -323,14 +336,13 @@ class Compilador(tk.Tk):
                      bg=SURFACE, fg=MUTED, width=w, anchor="w").pack(side="left")
         tk.Frame(f, bg=BORDER, height=1).pack(fill="x")
 
-        # ── Lista de símbolos ─────────────────────────────────────────────────
-        sym_frame = tk.Frame(f, bg=BG)
+        sym_frame = tk.Frame(f, bg=BG_UI)
         sym_frame.pack(fill="both", expand=True)
         vsb1 = tk.Scrollbar(sym_frame, orient="vertical")
         vsb1.pack(side="right", fill="y")
 
         self.sym_list = tk.Text(
-            sym_frame, wrap="none", bg=BG, fg=FG,
+            sym_frame, wrap="none", bg=BG_UI, fg="#000000",
             font=MONO_SM, relief="flat", padx=8, pady=4,
             state="disabled", yscrollcommand=vsb1.set,
             cursor="arrow", height=10
@@ -338,25 +350,22 @@ class Compilador(tk.Tk):
         self.sym_list.pack(fill="both", expand=True)
         vsb1.config(command=self.sym_list.yview)
 
-        # Registrar tags de la tabla semántica
         for tag, cfg in SEM_TAGS.items():
             self.sym_list.tag_configure(tag, **cfg)
 
-        # ── Separador ─────────────────────────────────────────────────────────
         tk.Frame(f, bg=BORDER, height=1).pack(fill="x")
         tk.Label(f, text="ADVERTENCIAS Y ERRORES SEMÁNTICOS",
-                 font=("Courier New", 9, "bold"), bg=BG, fg=MUTED,
+                 font=("Courier New", 9, "bold"), bg=BG_UI, fg=MUTED,
                  anchor="w", padx=8, pady=6).pack(fill="x")
         tk.Frame(f, bg=BORDER, height=1).pack(fill="x")
 
-        # ── Lista de advertencias/errores semánticos ──────────────────────────
-        msg_frame = tk.Frame(f, bg=BG)
+        msg_frame = tk.Frame(f, bg=BG_UI)
         msg_frame.pack(fill="both", expand=True)
         vsb2 = tk.Scrollbar(msg_frame, orient="vertical")
         vsb2.pack(side="right", fill="y")
 
         self.sem_msg = tk.Text(
-            msg_frame, wrap="word", bg=BG, fg=FG,
+            msg_frame, wrap="word", bg=BG_UI, fg="#000000",
             font=MONO_SM, relief="flat", padx=8, pady=4,
             state="disabled", yscrollcommand=vsb2.set,
             cursor="arrow"
@@ -368,16 +377,16 @@ class Compilador(tk.Tk):
             self.sem_msg.tag_configure(tag, **cfg)
 
     def _build_tab_errores(self):
-        f = tk.Frame(self.tab_frame, bg=BG)
+        f = tk.Frame(self.tab_frame, bg=BG_UI)
         self.tab_frames["errores"] = f
 
-        wrap = tk.Frame(f, bg=BG)
+        wrap = tk.Frame(f, bg=BG_UI)
         wrap.pack(fill="both", expand=True)
         vsb = tk.Scrollbar(wrap, orient="vertical")
         vsb.pack(side="right", fill="y")
 
         self.err_text = tk.Text(
-            wrap, wrap="word", bg=BG, fg=FG,
+            wrap, wrap="word", bg=BG_UI, fg="#000000",
             font=MONO_SM, relief="flat", padx=12, pady=8,
             state="disabled", yscrollcommand=vsb.set
         )
@@ -399,10 +408,105 @@ class Compilador(tk.Tk):
 
         for n, btn in self.tab_btns.items():
             if n == nombre:
-                btn.configure(bg=BG, fg=FG, font=SANS_B, relief="groove")
+                btn.configure(bg=BG_UI, fg="#1a1a2e", font=SANS_B, relief="groove")
             else:
                 btn.configure(bg=SURFACE, fg=MUTED, font=SANS, relief="flat")
         self.current_tab.set(nombre)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    #  SYNTAX HIGHLIGHTING EN TIEMPO REAL
+    # ══════════════════════════════════════════════════════════════════════════
+
+    def _schedule_highlight(self):
+        """Programa el resaltado con debounce de 80 ms para no saturar la UI."""
+        if self._highlight_job is not None:
+            self.after_cancel(self._highlight_job)
+        self._highlight_job = self.after(80, self._highlight_now)
+
+    def _highlight_now(self):
+        """
+        Aplica syntax highlighting completo al editor.
+        Usa PATRON_MAESTRO y _clasificar_identificador del analizador léxico,
+        garantizando que los colores son 100% coherentes con el análisis.
+        """
+        self._highlight_job = None
+        codigo = self.editor.get("1.0", "end-1c")
+
+        # Limpiar tags anteriores
+        for tipo in SH:
+            self.editor.tag_remove(tipo, "1.0", "end")
+
+        if not codigo.strip():
+            return
+
+        try:
+            from reglas import PATRON_MAESTRO
+            from analizador import _clasificar_identificador
+
+            _NORM = {
+                'OPERADOR_ASIGNACIÓN': 'OPERADOR_ASIG',
+                'OPERADOR_RELACIONAL': 'OPERADOR_REL',
+                'OPERADOR_LÓGICO':     'OPERADOR_LOG',
+                'OPERADOR_ARITMÉTICO': 'OPERADOR_ARIT',
+                'OPERADOR_INCREMENTO': 'OPERADOR_INCR',
+                'OPERADOR_BITWISE':    'OPERADOR_BIT',
+                'LITERAL_NUMÉRICO':    'LITERAL_NUM',
+            }
+
+            linea        = 1
+            inicio_linea = 0
+
+            for match in PATRON_MAESTRO.finditer(codigo):
+                tipo  = match.lastgroup
+                valor = match.group()
+
+                # ── Saltos de línea ────────────────────────────────────────
+                if tipo == 'NUEVA_LÍNEA':
+                    linea += 1
+                    inicio_linea = match.end()
+                    continue
+
+                if tipo == 'SEPARADOR':
+                    continue
+
+                # ── Comentarios: resaltar span completo ────────────────────
+                if tipo in ('COMENTARIO_LINEA', 'COMENTARIO_MULTILINEA'):
+                    col_ini   = match.start() - inicio_linea
+                    start_idx = f"{linea}.{col_ini}"
+
+                    saltos = valor.replace('\r\n', '\n').replace('\r', '\n').count('\n')
+                    if saltos == 0:
+                        end_idx = f"{linea}.{col_ini + len(valor)}"
+                    else:
+                        ultimo  = max(valor.rfind('\n'), valor.rfind('\r'))
+                        end_col = len(valor) - ultimo - 1
+                        end_idx = f"{linea + saltos}.{end_col}"
+
+                    self.editor.tag_add("COMENTARIO", start_idx, end_idx)
+
+                    linea += saltos
+                    if '\n' in valor or '\r' in valor:
+                        ultimo = max(valor.rfind('\n'), valor.rfind('\r'))
+                        inicio_linea = match.start() + ultimo + 1
+                    continue
+
+                # ── Normalizar y clasificar ────────────────────────────────
+                tipo = _NORM.get(tipo, tipo)
+
+                if tipo == 'IDENTIFICADOR':
+                    tipo = _clasificar_identificador(valor)
+
+                if tipo not in SH:
+                    continue
+
+                # ── Aplicar tag en el widget ───────────────────────────────
+                col       = match.start() - inicio_linea
+                start_idx = f"{linea}.{col}"
+                end_idx   = f"{linea}.{col + len(valor)}"
+                self.editor.tag_add(tipo, start_idx, end_idx)
+
+        except Exception:
+            pass  # No romper la UI si algo falla internamente
 
     # ══════════════════════════════════════════════════════════════════════════
     #  ANÁLISIS PRINCIPAL
@@ -413,27 +517,22 @@ class Compilador(tk.Tk):
         if not codigo.strip():
             return
 
+        self._highlight_now()
+
         try:
-            # Léxico
             tokens_unicos, frecuencias, lex_errors = analizar(codigo)
             tokens_full, _ = analizar_completo(codigo)
 
-            # Sintáctico
             arbol, sin_errors = analizar_sintactico(tokens_full)
-
-            # Semántico
             tabla, sem_warns, sem_errors = analizar_semantico(arbol)
 
             all_errors = lex_errors + sin_errors + sem_errors
 
-            # Poblar pestañas
-            self._fill_tokens(tokens_unicos, frecuencias)
             self._fill_stats(tokens_unicos, frecuencias, all_errors)
             self._fill_arbol(arbol, sin_errors)
             self._fill_semantico(tabla, sem_warns, sem_errors)
             self._fill_errores(lex_errors, sin_errors, sem_errors)
 
-            # Barra de estado
             total_ap = sum(frecuencias.values())
             if all_errors:
                 self.lbl_status.configure(
@@ -450,10 +549,8 @@ class Compilador(tk.Tk):
                      f"{total_ap} apariciones  ·  "
                      f"{len(tabla.todos())} símbolos")
 
-            # Color del botón de errores
             self.tab_btns["errores"].configure(
                 fg="#cc0000" if all_errors else MUTED)
-            # Color del botón semántico
             self.tab_btns["semantico"].configure(
                 fg="#cc0000" if sem_errors else
                    "#996600" if sem_warns else MUTED)
@@ -465,34 +562,8 @@ class Compilador(tk.Tk):
             traceback.print_exc()
 
     # ══════════════════════════════════════════════════════════════════════════
-    #  MÉTODOS DE RELLENO DE PESTAÑAS
+    #  RELLENO DE PESTAÑAS
     # ══════════════════════════════════════════════════════════════════════════
-
-    def _fill_tokens(self, tokens, frecuencias):
-        tl = self.token_list
-        tl.configure(state="normal")
-        tl.delete("1.0", "end")
-
-        max_freq = max(frecuencias.values(), default=1)
-
-        for tok in tokens:
-            clave = (tok.tipo, tok.valor)
-            freq  = frecuencias.get(clave, 1)
-            tag   = tok.tipo if tok.tipo in TOKEN_TAGS else "muted"
-
-            tl.insert("end", f"{tok.tipo:<22}", tag)
-            tl.insert("end", f"  {tok.valor:<22}", tag)
-
-            bar_filled = round((freq / max_freq) * 16)
-            bar = "█" * bar_filled + "░" * (16 - bar_filled)
-            tl.insert("end", f"  {freq:>3}  ", "muted")
-            tl.insert("end", bar, tag)
-            tl.insert("end", "\n")
-
-        if not tokens:
-            tl.insert("end", "  Sin tokens encontrados\n", "muted")
-
-        tl.configure(state="disabled")
 
     def _fill_stats(self, tokens, frecuencias, errores):
         for w in self.cards_frame.winfo_children():
@@ -514,7 +585,7 @@ class Compilador(tk.Tk):
                             relief="solid", bd=1, padx=16, pady=10)
             card.pack(side="left", padx=8, pady=4)
             tk.Label(card, text=val, font=("Helvetica", 22, "bold"),
-                     bg=SURFACE, fg=FG).pack()
+                     bg=SURFACE, fg="#1a1a2e").pack()
             tk.Label(card, text=label, font=("Courier New", 9),
                      bg=SURFACE, fg=MUTED).pack()
 
@@ -528,27 +599,35 @@ class Compilador(tk.Tk):
         sorted_cats = sorted(cats.items(), key=lambda x: -x[1])
 
         for tipo, cnt in sorted_cats:
-            row = tk.Frame(self.stats_inner, bg=BG, pady=4, padx=16)
+            row = tk.Frame(self.stats_inner, bg=BG_UI, pady=4, padx=16)
             row.pack(fill="x")
-            tk.Label(row, text=f"{tipo:<26}", font=MONO_SM,
-                     bg=BG, fg=FG, anchor="w", width=26).pack(side="left")
+
+            # Punto de color igual al usado en el editor
+            color = CAT_COLOR.get(tipo, "#888888")
+            dot = tk.Canvas(row, bg=BG_UI, width=12, height=16,
+                            highlightthickness=0)
+            dot.pack(side="left")
+            dot.create_oval(1, 4, 11, 14, fill=color, outline="")
+
+            tk.Label(row, text=f"{tipo:<24}", font=MONO_SM,
+                     bg=BG_UI, fg="#1a1a2e", anchor="w", width=24).pack(side="left")
 
             bar_w = int((cnt / max_cnt) * 200)
-            c = tk.Canvas(row, bg=BG, height=16, width=220,
+            c = tk.Canvas(row, bg=BG_UI, height=16, width=220,
                           highlightthickness=0, relief="flat")
             c.pack(side="left")
-            c.create_rectangle(0, 4, max(bar_w, 2), 14, fill=FG, outline="")
+            c.create_rectangle(0, 4, max(bar_w, 2), 14, fill=color, outline="")
             c.create_rectangle(bar_w, 4, 220, 14, fill=SURFACE, outline="")
 
             tk.Label(row, text=f"{cnt:>4}", font=MONO_SM,
-                     bg=BG, fg=MUTED, width=4).pack(side="left", padx=6)
+                     bg=BG_UI, fg=MUTED, width=4).pack(side="left", padx=6)
 
     def _fill_arbol(self, raiz: Nodo, errores: List[str]):
         canvas = self.tree_canvas
         canvas.delete("all")
 
         NODE_W, NODE_H = 120, 28
-        H_GAP, V_GAP   = 14,  54
+        H_GAP, V_GAP   = 14, 54
 
         posiciones = {}
 
@@ -569,7 +648,6 @@ class Compilador(tk.Tk):
                     for hijo in reversed(nodo.hijos):
                         pila.append((hijo, False))
 
-            # Posicionamiento
             cola = [(root, 0, 20)]
             while cola:
                 nodo, prof, x_ini = cola.pop(0)
@@ -578,7 +656,6 @@ class Compilador(tk.Tk):
                 posiciones[id(nodo)] = (x_centro - NODE_W // 2, cy)
 
                 x_cursor = x_ini
-                # Orden especial para asignaciones
                 hijos = nodo.hijos if nodo.etiqueta.startswith('asig') else reversed(nodo.hijos)
                 for hijo in hijos:
                     cola.append((hijo, prof + 1, x_cursor))
@@ -602,7 +679,6 @@ class Compilador(tk.Tk):
         raiz_x = posiciones[id(raiz)][0]
         canvas.xview_moveto(max(0.0, (raiz_x - 20) / total_w))
 
-        # ==================== DIBUJAR LÍNEAS ====================
         pila = [raiz]
         while pila:
             nodo = pila.pop()
@@ -611,51 +687,45 @@ class Compilador(tk.Tk):
             px, py = posiciones[id(nodo)]
             pcx = px + NODE_W // 2
             pcy = py + NODE_H
-
             hijos = nodo.hijos if nodo.etiqueta.startswith('asig') else reversed(nodo.hijos)
             for hijo in hijos:
                 if id(hijo) not in posiciones:
                     continue
                 hx, hy = posiciones[id(hijo)]
-                hcx = hx + NODE_W // 2
-                canvas.create_line(pcx, pcy, hcx, hy, fill="#888888", width=1)
+                canvas.create_line(pcx, pcy, hx + NODE_W // 2, hy,
+                                   fill="#888888", width=1)
                 pila.append(hijo)
 
-        # ==================== DIBUJAR NODOS ====================
         pila = [raiz]
         while pila:
             nodo = pila.pop()
             if id(nodo) not in posiciones:
                 continue
             x, y = posiciones[id(nodo)]
-            etq  = nodo.etiqueta
-            if len(etq) > 16:
-                etq = etq[:15] + "…"
+            etq  = nodo.etiqueta[:15] + "…" if len(nodo.etiqueta) > 16 else nodo.etiqueta
 
-            # Colores según tipo de nodo
             if nodo.etiqueta == "programa":
-                bg_col, fg_col, borde = "#000000", "#ffffff", "#000000"
+                bg_col, fg_col, borde = "#1a1a2e", "#ffffff", "#bd93f9"
             elif nodo.etiqueta == "bloque":
-                bg_col, fg_col, borde = "#333333", "#ffffff", "#000000"
+                bg_col, fg_col, borde = "#333333", "#ffffff", "#44475a"
             elif any(nodo.etiqueta.startswith(k) for k in
                      ("if", "while", "for", "return", "do-while", "switch")):
-                bg_col, fg_col, borde = "#555555", "#ffffff", "#000000"
+                bg_col, fg_col, borde = "#44475a", "#bd93f9", "#6272a4"
             elif any(nodo.etiqueta.startswith(k) for k in
                      ("decl ", "func ", "proto ", "asig", "llamada")):
-                bg_col, fg_col, borde = "#f0f0f0", "#000000", "#000000"
+                bg_col, fg_col, borde = "#f0f0f0", "#1a1a2e", "#d0d0d0"
             elif nodo.etiqueta in ("condición", "else", "init", "cond", "inc",
                                    "case", "default", "break", "continue"):
                 bg_col, fg_col, borde = "#dddddd", "#000000", "#888888"
             else:
-                bg_col, fg_col, borde = "#ffffff", "#000000", "#aaaaaa"
+                bg_col, fg_col, borde = "#ffffff", "#333333", "#cccccc"
 
             canvas.create_rectangle(x, y, x + NODE_W, y + NODE_H,
                                     fill=bg_col, outline=borde, width=1)
             canvas.create_text(x + NODE_W // 2, y + NODE_H // 2,
                                text=etq, font=("Courier New", 9),
                                fill=fg_col, anchor="center")
-            
-            # Orden de dibujo de hijos
+
             hijos = nodo.hijos if nodo.etiqueta.startswith('asig') else reversed(nodo.hijos)
             for hijo in hijos:
                 pila.append(hijo)
@@ -668,7 +738,6 @@ class Compilador(tk.Tk):
             )
 
     def _fill_semantico(self, tabla, advertencias: List[str], errores: List[str]):
-        # ── Tabla de símbolos ─────────────────────────────────────────────────
         sl = self.sym_list
         sl.configure(state="normal")
         sl.delete("1.0", "end")
@@ -676,7 +745,7 @@ class Compilador(tk.Tk):
         simbolos = tabla.todos()
         if simbolos:
             for sim in simbolos:
-                cat_tag = sim.categoria  # 'variable', 'funcion', 'parametro'
+                cat_tag   = sim.categoria
                 usado_txt = "✓" if sim.usado else "✗"
                 usado_tag = "muted_sem" if sim.usado else "err_sem"
 
@@ -690,7 +759,6 @@ class Compilador(tk.Tk):
 
         sl.configure(state="disabled")
 
-        # ── Advertencias y errores semánticos ─────────────────────────────────
         sm = self.sem_msg
         sm.configure(state="normal")
         sm.delete("1.0", "end")
@@ -748,6 +816,7 @@ class Compilador(tk.Tk):
     def _on_key(self, _=None):
         self._update_line_nums()
         self._update_cursor()
+        self._schedule_highlight()
 
     def _tab(self, e):
         self.editor.insert("insert", "    ")
@@ -759,14 +828,12 @@ class Compilador(tk.Tk):
 
         if new_count != old_count:
             self.line_nums.configure(state="normal")
-
             if new_count > old_count:
                 nuevas    = "\n".join(str(i) for i in range(old_count + 1, new_count + 1))
                 separador = "\n" if old_count > 0 else ""
                 self.line_nums.insert("end", separador + nuevas)
             else:
                 self.line_nums.delete(f"{new_count + 1}.0", "end")
-
             self.line_nums.configure(state="disabled")
             self._last_line_count = new_count
 
@@ -784,16 +851,11 @@ class Compilador(tk.Tk):
         self.editor.delete("1.0", "end")
         self._last_line_count = 0
 
-        # Borrar explícitamente el contenido del widget de números de línea
         self.line_nums.configure(state="normal")
         self.line_nums.delete("1.0", "end")
         self.line_nums.configure(state="disabled")
 
         self._update_line_nums()
-
-        self.token_list.configure(state="normal")
-        self.token_list.delete("1.0", "end")
-        self.token_list.configure(state="disabled")
 
         for w in self.cards_frame.winfo_children():
             w.destroy()
@@ -822,16 +884,35 @@ class Compilador(tk.Tk):
     def _apply_style(self):
         s = ttk.Style(self)
         s.theme_use("default")
-        s.configure("TScrollbar", background=SURFACE, troughcolor=BG,
-                    arrowcolor=MUTED, bordercolor=BG, relief="flat")
+        s.configure("TScrollbar", background=SURFACE, troughcolor=BG_UI,
+                    arrowcolor=MUTED, bordercolor=BG_UI, relief="flat")
 
     @staticmethod
     def _ejemplo():
         return """\
-a = 0
-print(a)
-b
-c = 0
+# Ejemplo de código Python
+def saludar(nombre):
+    mensaje = "Hola, " + nombre
+    print(mensaje)
+    return mensaje
+
+x = 42
+y = 3.14
+resultado = x + y
+
+if resultado > 40:
+    print("Grande")
+elif resultado == 40:
+    print("Exacto")
+else:
+    print("Pequeño")
+
+for i in range(10):
+    if i % 2 == 0:
+        print(i)
+
+lista = [1, 2, 3]
+largo = len(lista)
 """
 
 
