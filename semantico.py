@@ -1,5 +1,3 @@
-"""semantico.py — Analizador Semántico corregido (parámetros de funciones)"""
-
 from typing import List, Dict, Tuple, Optional
 from sintactico import Nodo
 
@@ -107,7 +105,9 @@ class AnalizadorSemantico:
     def analizar(self, raiz: Nodo):
         self._visitar(raiz)
         for s in self.tabla.simbolos_no_usados():
-            self._advertencia(f"'{s.nombre}' declarado pero nunca usado", s.linea)
+            if s.tipo != '?':
+                self._advertencia(f"'{s.nombre}' declarado pero nunca usado", s.linea)
+        
         return self.tabla, self.advertencias, self.errores
 
     def _visitar(self, nodo: Nodo) -> str:
@@ -128,13 +128,14 @@ class AnalizadorSemantico:
         if etq.startswith('asig ') or '=' in etq:
             if nodo.hijos:
                 izq = nodo.hijos[0]
+                # Declaramos la variable del lado izquierdo
                 if isinstance(izq, Nodo) and not izq.hijos and izq.etiqueta[0].isalpha():
                     nombre = izq.etiqueta
                     if nombre not in _BUILTINS:
                         tipo = _inferir_tipo(nodo.hijos[1].etiqueta) if len(nodo.hijos) > 1 else '?'
                         self.tabla.declarar(Simbolo(nombre, tipo, 'variable', nodo.linea))
-                        self.tabla.marcar_usado(nombre)
-            self._visitar_hijos(nodo)
+                if len(nodo.hijos) > 1:
+                    self._visitar(nodo.hijos[1])
             return '?'
 
         # ==================== FOR ====================
@@ -161,11 +162,14 @@ class AnalizadorSemantico:
         # ==================== IDENTIFICADOR ====================
         if not nodo.hijos and etq and etq[0].isalpha():
             nombre = etq
-            if nombre not in _BUILTINS and not self.tabla.buscar(nombre):
-                if nombre not in {'def', 'if', 'else', 'elif', 'for', 'in', 'while', 'return', 'and', 'or', 'not', 'pass'}:
+            if nombre not in _BUILTINS:
+                simbolo = self.tabla.buscar(nombre)
+                if not simbolo:
+                    # Registrar como no declarado para que aparezca en la tabla
+                    self.tabla.declarar(Simbolo(nombre, '?', 'variable', nodo.linea))
                     self._error(f"'{nombre}' usado sin declarar", nodo.linea)
-            else:
-                self.tabla.marcar_usado(nombre)
+                else:
+                    self.tabla.marcar_usado(nombre)
             return '?'
 
         self._visitar_hijos(nodo)

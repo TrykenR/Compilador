@@ -22,7 +22,7 @@ class Nodo:
     def _str_indent(self, nivel: int) -> str:
         indent    = "  " * nivel
         resultado = f"{indent}{self.etiqueta}"
-        for hijo in self.hijos:
+        for hijo in reversed(self.hijos):
             resultado += "\n" + hijo._str_indent(nivel + 1)
         return resultado
 
@@ -334,30 +334,32 @@ class Parser:
         if tok is None or tok.valor == '}':
             return None
 
-        #if
+        # ====================== SENTENCIAS ESTRUCTURADAS ======================
+        
+        # if
         if tok.tipo == 'PALABRA_CLAVE' and tok.valor == 'if':
             self.consume()
             cond  = self.expr()
-            self.esperar('DELIMITADOR', ':')          # ← obliga a poner :
+            self.esperar('DELIMITADOR', ':')
             then  = self.bloque_o_sent()
 
             hijos = [Nodo('condición', [cond], tok.linea), then]
 
-            # elif (puede haber varios)
+            # elif
             while self.peek() and self.peek().valor == 'elif':
                 self.consume()
                 cond_elif = self.expr()
-                self.esperar('DELIMITADOR', ':')      # ← obliga a poner :
+                self.esperar('DELIMITADOR', ':')
                 then_elif = self.bloque_o_sent()
                 hijos.append(Nodo('elif', [
                     Nodo('condición', [cond_elif]),
                     then_elif
                 ], tok.linea))
 
-            # else (opcional)
+            # else
             if self.peek() and self.peek().valor == 'else':
                 self.consume()
-                self.esperar('DELIMITADOR', ':')      # ← obliga a poner :
+                self.esperar('DELIMITADOR', ':')
                 hijos.append(Nodo('else', [self.bloque_o_sent()], tok.linea))
 
             return Nodo('if', hijos, tok.linea)
@@ -365,18 +367,18 @@ class Parser:
         # while
         if tok.tipo == 'PALABRA_CLAVE' and tok.valor == 'while':
             self.consume()
-            cond   = self.expr()                   # sin paréntesis
+            cond   = self.expr()
             self.esperar('DELIMITADOR', ':')
             cuerpo = self.bloque_o_sent()
             return Nodo('while', [Nodo('condición', [cond], tok.linea), cuerpo], tok.linea)
         
-        # for — init puede ser decl, asig o vacío
+        # for
         if tok.tipo == 'PALABRA_CLAVE' and tok.valor == 'for':
             self.consume()
             var = self.esperar('IDENTIFICADOR')
             self.esperar('PALABRA_CLAVE', 'in')
             iterable = self.expr()
-            self.esperar('DELIMITADOR', ':')          # ← obliga a poner :
+            self.esperar('DELIMITADOR', ':')
             cuerpo = self.bloque_o_sent()
             return Nodo('for', [
                 Nodo('init', [Nodo(var.valor if var else '?', [], tok.linea)]),
@@ -384,7 +386,7 @@ class Parser:
                 cuerpo
             ], tok.linea)
 
-        # return [expr] ;
+        # return
         if tok.tipo == 'PALABRA_CLAVE' and tok.valor == 'return':
             self.consume()
             if self.val_es(';'):
@@ -404,6 +406,7 @@ class Parser:
         if tok.valor == '{':
             return self.bloque()
 
+        # Función def
         if tok.tipo == 'PALABRA_CLAVE' and tok.valor == 'def':
             self.consume()
             nombre_tok = self.esperar('IDENTIFICADOR')
@@ -415,11 +418,11 @@ class Parser:
             return Nodo(f"func {nombre_tok.valor if nombre_tok else '?'}",
                         params + [cuerpo], tok.linea)
         
-        # Declaración de variable o función
+        # Declaración con tipo (int x, float y, etc.)
         if self.es_tipo_primitivo():
             return self._decl_tipo()
 
-        # Asignación, ++/--, llamada
+        # ====================== IDENTIFICADOR (asignación, llamada, etc.) ======================
         if tok.tipo == 'IDENTIFICADOR':
             return self._asignacion_o_llamada()
 
@@ -428,10 +431,13 @@ class Parser:
             self.consume()
             return None
 
-        # Expresión suelta (ej: llamada a función como sentencia)
-        e = self.expr()
-        self.coincidir('DELIMITADOR', ';')
-        return e
+        # Token inesperado
+        self.errores.append(
+            f"Error sintáctico en línea {tok.linea}: "
+            f"token inesperado '{tok.valor}' ({tok.tipo})"
+        )
+        self._sincronizar()
+        return None
 
     # ── Auxiliares ────────────────────────────────────────────────────────────
 
@@ -554,6 +560,12 @@ class Parser:
             val = self.expr()
             self.coincidir('DELIMITADOR', ';')
             return Nodo(f"asig {op.valor}", [nodo_izq, val], tok.linea)
+
+        self.errores.append(
+            f"Error sintáctico en línea {tok.linea}: "
+            f"expresión inválida o identificador '{tok.valor}' "
+            f"usado como sentencia"
+        )
 
         self.coincidir('DELIMITADOR', ';')
         return nodo_izq
