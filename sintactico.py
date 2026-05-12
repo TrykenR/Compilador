@@ -426,31 +426,6 @@ class Parser:
         if tok.tipo == 'IDENTIFICADOR':
             return self._asignacion_o_llamada()
 
-        # ====================== EXPRESIÓN SUELTA (NUEVA RESTRICCIÓN) ======================
-        # Solo permitimos expresiones útiles como llamadas a función.
-        # Variables solas (ej: "b") generan error sintáctico.
-        if tok.tipo in ('IDENTIFICADOR', 'LITERAL_NUM', 'LITERAL_CADENA', 
-                       'LITERAL_BOOLEANO'):
-            
-            expr = self.expr()
-            
-            # Si es solo un identificador sin hijos → es variable suelta
-            if (expr and not expr.hijos and 
-                expr.etiqueta and expr.etiqueta[0].isalpha() and
-                not expr.etiqueta.endswith('(...)')):
-                
-                self.errores.append(
-                    f"Error sintáctico en línea {expr.linea}: "
-                    f"variable '{expr.etiqueta}' usada como sentencia. "
-                    f"¿Olvidaste asignarla o poner una llamada?"
-                )
-                self.coincidir('DELIMITADOR', ';')
-                return None
-
-            # Si es una llamada a función u otra expresión válida, la aceptamos
-            self.coincidir('DELIMITADOR', ';')
-            return expr
-
         # Sentencia vacía
         if tok.valor == ';':
             self.consume()
@@ -585,6 +560,12 @@ class Parser:
             val = self.expr()
             self.coincidir('DELIMITADOR', ';')
             return Nodo(f"asig {op.valor}", [nodo_izq, val], tok.linea)
+
+        self.errores.append(
+            f"Error sintáctico en línea {tok.linea}: "
+            f"expresión inválida o identificador '{tok.valor}' "
+            f"usado como sentencia"
+        )
 
         self.coincidir('DELIMITADOR', ';')
         return nodo_izq

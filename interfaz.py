@@ -663,17 +663,11 @@ class Compilador(tk.Tk):
         if errores:
             canvas.create_text(
                 10, total_h - 10,
-                text=f"⚠  {len(errores)} error(es) sintáctico(s) — árbol puede ser parcial",
+                text=f"⚠  {len(errores)} error(es) sintáctico(s)",
                 font=("Courier New", 9), fill="#cc0000", anchor="sw"
             )
 
     def _fill_semantico(self, tabla, advertencias: List[str], errores: List[str]):
-        """
-        Rellena la pestaña semántica con:
-          - Tabla de símbolos: cada símbolo en una fila con tipo, categoría, línea y uso.
-          - Advertencias en amarillo oscuro.
-          - Errores semánticos en rojo.
-        """
         # ── Tabla de símbolos ─────────────────────────────────────────────────
         sl = self.sym_list
         sl.configure(state="normal")
